@@ -15,6 +15,7 @@ def play():
         print('Cannot connect to host!')
         exit()
 
+
     def on_response(ch, method, properties, body):
         resp = body.decode()
         print(f"Playing against: {resp}!")
