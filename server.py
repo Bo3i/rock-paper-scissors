@@ -9,7 +9,7 @@ sessions = {}
 def callback(ch, method, properties, body):
     message = body.decode()
     print("Received:", message)
-    ch.basic_ack(delivery_tag=method.delivery_tag)
+    #ch.basic_ack(delivery_tag=method.delivery_tag)
 
     session_id, player_name = message.split(',')
 
@@ -44,13 +44,13 @@ def callback(ch, method, properties, body):
 def start_game(session_id, score):
     player1_move, player2_move = '', ''
     recieved = [0, 0]
-    print(f"recieved: {recieved}")
+    #print(f"recieved: {recieved}")
 
     def recieve1(ch, method, properties, body):
         nonlocal player1_move, recieved
         player1_move = body.decode()
         print(f"Recieved {player1_move} form player {player1_name}")
-        ch.basic_ack(delivery_tag=method.delivery_tag)
+        #ch.basic_ack(delivery_tag=method.delivery_tag)
         recieved[0] += 1
         if recieved[0] == recieved[1] and recieved[0]+recieved[1] != 0:
             print(f"Recieved: {recieved}")
@@ -64,7 +64,7 @@ def start_game(session_id, score):
         nonlocal player2_move, recieved
         player2_move = body.decode()
         print(f"Recieved {player2_move} form player {player2_name}")
-        ch.basic_ack(delivery_tag=method.delivery_tag)
+        #ch.basic_ack(delivery_tag=method.delivery_tag)
         recieved[1] += 1
         if recieved[0] == recieved[1] and recieved[0]+recieved[1] != 0:
             print(f"Recieved: {recieved}")

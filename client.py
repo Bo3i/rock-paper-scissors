@@ -1,6 +1,5 @@
-import random
-
 import pika
+
 
 def play():
     print('Welcome to simple online "ROCK PAPER SCISSORS" game!')
@@ -18,7 +17,7 @@ def play():
     def on_response(ch, method, properties, body):
         opponent, p_id = body.decode().split(",")
         print(f"Playing against: {opponent}!")
-        ch.basic_ack(delivery_tag=method.delivery_tag)
+        #ch.basic_ack(delivery_tag=method.delivery_tag)
         channel.queue_declare(queue=f"{player_name}{session_id}{p_id}")
         channel.queue_declare(queue=f"{player_name}{p_id}won")
         def play_round():
@@ -31,7 +30,7 @@ def play():
             def winner(ch, method, properties, body):
                 win, mov, y_score, op_score = body.decode().split(",")
                 print(f"{opponent} chose: {mov}")
-                ch.basic_ack(delivery_tag=method.delivery_tag)
+                #ch.basic_ack(delivery_tag=method.delivery_tag)
                 if win == "Tie":
                     print("It's a tie!")
                 elif win == opponent:
@@ -69,4 +68,5 @@ def play():
     channel.start_consuming()
 
 
-play()
+if __name__ == "__main__":
+    play()
