@@ -171,10 +171,31 @@ def on_response(ch, method, properties, body):
     play_round()
 
 def play_round():
-    global connection, player_input, opponent, texts, buttons, channel
+    global connection, player_input, opponent, texts, buttons, channel, input_boxes
     buttons = [paper_button, scissors_button, rock_button]
     texts = [f"Playing against: {opponent}"]
-    channel.basic_publish(exchange='',
+    input_boxes = []
+
+    #rendering objects
+    for box in input_boxes:
+        box.update()
+        box.draw(screen)
+
+    for button in buttons:
+        button.update()
+        button.draw(screen)
+
+    for text in texts:
+        draw_text(screen, text, LARGE_FONT, TEXT_COLOR, (WIDTH / 2, HEIGHT / 4))
+
+    pygame.display.flip()
+
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+        for button in buttons:
+            button.handle_event(event)
+            channel.basic_publish(exchange='',
                           routing_key=f"{player_name}{session_id}{p_id}",
                           body=player_input)
 
