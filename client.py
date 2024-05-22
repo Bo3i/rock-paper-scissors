@@ -1,10 +1,10 @@
-import pika
 import sys
 import pygame
-
+import pika
 
 pygame.init()
 
+# Constants
 WIDTH = 800
 HEIGHT = 600
 WHITE = (255, 255, 255)
@@ -12,7 +12,7 @@ BACKGROUND = (245, 235, 224)
 BUTTON_COLOR = (154, 154, 132)
 TEXT_COLOR = (79, 79, 64)
 BLACK = (0, 0, 0)
-GREY = (200, 200, 200)
+GREY = (133, 117, 110)
 
 # Pygame setup
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -41,11 +41,15 @@ opponent = ''
 p_id = ''
 player_input = ''
 
+
 # Function to draw text on screen
 def draw_text(surface, text, font, color, pos):
     text_object = font.render(text, True, color)
     text_rect = text_object.get_rect(center=pos)
     surface.blit(text_object, text_rect)
+
+# random variable
+is_clicked = False
 
 # Button class for image buttons
 class ImageButton:
@@ -64,6 +68,7 @@ class ImageButton:
 
     def update(self):
         return
+
 
 # Button class for text buttons
 class Button:
@@ -89,6 +94,7 @@ class Button:
         pygame.draw.rect(screen, color, self.rect)
         screen.blit(self.txt_surface, (self.rect.x + (self.rect.width - self.txt_surface.get_width()) // 2,
                                        self.rect.y + (self.rect.height - self.txt_surface.get_height()) // 2))
+
 
 # Input box class for text input
 class InputBox:
@@ -125,24 +131,53 @@ class InputBox:
         screen.blit(self.txt_surface, (self.rect.x + 5, self.rect.y + 5))
         pygame.draw.rect(screen, self.color, self.rect, 2)
 
-# Functions for game actions
+
+# Starting game
+def start_game():
+    global buttons, texts
+    print("DEBUG: Entering start_game function")
+    texts = ["Your turn!"]
+    buttons = [rock_button, paper_button, scissors_button]
+    screen.fill(BACKGROUND)
+    for text in texts:
+        draw_text(screen, text, LARGE_FONT, TEXT_COLOR, (WIDTH / 2, HEIGHT / 4))
+
+    for button in buttons:
+        button.update()
+        button.draw(screen)
+    pygame.display.flip()
+
+    print("DEBUG: listenning to actions")
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+        for button in buttons:
+            button.handle_event(event)
+
+
+
+
+# Function for connecting to the server
 def connect():
     global host, player_name, texts, buttons, input_boxes, connection, channel
     for box in input_boxes:
         player_name = box.text
     if host == '':
         host = 'localhost'
-    print(host)
+    print(f"DEBUG: Connecting to host: {host}")
 
     try:
         connection = pika.BlockingConnection(pika.ConnectionParameters(host=host))
         channel = connection.channel()
-        print(f'Successfully connected to: {host}')
+        print(f'DEBUG: Successfully connected to: {host}')
         define_session()
-    except:
-        print('Cannot connect to host!')
-        exit()
+    except Exception as e:
+        print(f'ERROR: Cannot connect to host! Error: {e}')
+        texts = ['Cannot connect to host!']
+        buttons = [button_exit]
 
+
+# function for starting new session
 def start_session():
     global input_boxes, buttons, texts, session_id, channel, connection
     for box in input_boxes:
@@ -151,92 +186,105 @@ def start_session():
     input_boxes = []
     buttons = []
 
-    channel.queue_declare(queue='start')
-    channel.basic_publish(exchange='',
-                          routing_key='start',
-                          body=f"{session_id},{player_name}")
-    channel.queue_declare(queue=player_name)
-    channel.basic_consume(queue=player_name, on_message_callback=on_response, auto_ack=True)
-    print("Message to server sent")
+    try:
+        channel.queue_declare(queue='start')
+        channel.basic_publish(exchange='',
+                              routing_key='start',
+                              body=f"{session_id},{player_name}")
+        channel.queue_declare(queue=player_name)
+        channel.basic_consume(queue=player_name, on_message_callback=on_response, auto_ack=True)
+        print("DEBUG: Message to server sent")
+        print("DEBUG: Waiting for response...")
+        channel.start_consuming()
 
-    print("Waiting for response...")
-    channel.start_consuming()
+    except Exception as e:
+        print(f"ERROR: Error starting session: {e}")
+        texts = ['Error starting session!']
+        buttons = [button_exit]
 
+
+# Function for handling server response
 def on_response(ch, method, properties, body):
     global opponent, p_id, player_name, channel
-    opponent, p_id = body.decode().split(",")
-    print(f"Playing against: {opponent}!")
-    channel.queue_declare(queue=f"{player_name}{session_id}{p_id}")
-    channel.queue_declare(queue=f"{player_name}{p_id}won")
-    play_round()
+    try:
+        opponent, p_id = body.decode().split(",")
+        print(f"DEBUG: Playing against: {opponent}!")
 
-def play_round():
-    global connection, player_input, opponent, texts, buttons, channel, input_boxes
-    buttons = [paper_button, scissors_button, rock_button]
-    texts = [f"Playing against: {opponent}"]
-    input_boxes = []
+        channel.queue_declare(queue=f"{player_name}{session_id}{p_id}")
+        channel.queue_declare(queue=f"{player_name}{p_id}won")
 
-    #rendering objects
-    for box in input_boxes:
-        box.update()
-        box.draw(screen)
+        start_game()
 
-    for button in buttons:
-        button.update()
-        button.draw(screen)
+    except Exception as e:
+        print(f"ERROR: Error in response: {e}")
+        texts = ['Error in response!']
+        buttons = [button_exit]
 
-    for text in texts:
-        draw_text(screen, text, LARGE_FONT, TEXT_COLOR, (WIDTH / 2, HEIGHT / 4))
 
-    pygame.display.flip()
+# Function for playing a round
 
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-        for button in buttons:
-            button.handle_event(event)
+def send_input():
+    global connection, player_input, opponent, texts, buttons, channel
+    try:
+        if is_clicked:
             channel.basic_publish(exchange='',
-                          routing_key=f"{player_name}{session_id}{p_id}",
-                          body=player_input)
+                              routing_key=f"{player_name}{session_id}{p_id}",
+                              body=player_input)
+            channel.basic_consume(queue=f"{player_name}{p_id}won", on_message_callback=winner, auto_ack=True)
+    except Exception as e:
+        print(f"ERROR: Error in play_round: {e}")
 
-    def winner(ch, method, properties, body):
+
+def winner(ch, method, properties, body):
+    try:
         win, mov, y_score, op_score = body.decode().split(",")
-        print(f"{opponent} chose: {mov}")
+        print(f"DEBUG: {opponent} chose: {mov}")
         if win == "Tie":
-            print("It's a tie!")
+            print("DEBUG: It's a tie!")
         elif win == opponent:
-            print(f"{win} wins!")
+            print(f"DEBUG: {win} wins!")
         else:
-            print("You win!")
-        print(f"---Score--- \nYou  {y_score} : {op_score}  {opponent}")
+            print("DEBUG: You win!")
+        print(f"DEBUG: ---Score--- \nYou  {y_score} : {op_score}  {opponent}")
         play_again = input('Do you want to play again? y/n: ')
         if play_again == 'n':
             connection.close()
-            print("Exiting... Goodbye!")
+            print("DEBUG: Exiting... Goodbye!")
             exit()
         else:
-            play_round()
+            send_input()
+    except Exception as e:
+        print(f"ERROR: Error in winner callback: {e}")
 
-    channel.basic_consume(queue=f"{player_name}{p_id}won", on_message_callback=winner, auto_ack=True)
-
+# Functions for handling player choices
 def on_rock():
     global player_input
     player_input = 'r'
+    print("DEBUG: Player chose rock")
+    is_clicked = True
+    send_input()
+
+
 
 def on_paper():
     global player_input
     player_input = 'p'
+    print("DEBUG: Player chose paper")
+    is_clicked = True
+    send_input()
+
+
 
 def on_scissors():
     global player_input
     player_input = 's'
+    print("DEBUG: Player chose scissors")
+    is_clicked = True
+    send_input()
 
-def start_game():
-    global buttons, texts
-    texts = ["Your turn!"]
-    buttons = [rock_button, paper_button, scissors_button]
-    screen.fill(BACKGROUND)
 
+
+# Function to initialize the game
 def init_game():
     global buttons, texts, input_boxes
     texts = ["Connect to host, for localhost press enter"]
@@ -244,10 +292,15 @@ def init_game():
     box = InputBox(300, 200, 200, 50)
     input_boxes = [box]
 
+
+# Function to exit the game
 def exit_game():
     global running
     running = False
+    print("DEBUG: Exiting game")
 
+
+# Function to define a session
 def define_session():
     global input_boxes, buttons, texts
     buttons = [button_session]
@@ -255,6 +308,8 @@ def define_session():
     box = InputBox(300, 200, 200, 50)
     input_boxes = [box]
 
+
+# Function to set player name
 def set_name():
     global host
     global texts, buttons, input_boxes
@@ -265,6 +320,7 @@ def set_name():
     buttons = [button_name]
     box = InputBox(300, 200, 200, 50)
     input_boxes = [box]
+
 
 # Create buttons
 button_start = Button(WIDTH / 4, 200, 150, 50, "Start", BUTTON_COLOR, GREY, init_game)
@@ -280,6 +336,9 @@ button_session = Button(350, 300, 100, 50, "Ok", BUTTON_COLOR, GREY, start_sessi
 texts = ["Rock Paper Scissors"]
 buttons = [button_start, button_exit]
 input_boxes = []
+
+
+# Main function
 def main():
     global running
     running = True
@@ -295,10 +354,8 @@ def main():
             button.draw(screen)
 
         for box in input_boxes:
-
             box.update()
             box.draw(screen)
-
 
         pygame.display.flip()
 
@@ -314,6 +371,7 @@ def main():
 
     pygame.quit()
     sys.exit()
+
 
 if __name__ == "__main__":
     main()
