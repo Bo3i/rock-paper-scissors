@@ -42,9 +42,7 @@ opponent = ''
 p_id = ''
 player_input = ''
 is_clicked = False
-
-
-
+current_state = 'main_menu'  # Initial state
 
 
 # Function to draw text on screen
@@ -52,6 +50,7 @@ def draw_text(surface, text, font, color, pos):
     text_object = font.render(text, True, color)
     text_rect = text_object.get_rect(center=pos)
     surface.blit(text_object, text_rect)
+
 
 # Button class for image buttons
 class ImageButton:
@@ -70,6 +69,7 @@ class ImageButton:
 
     def update(self):
         pass
+
 
 # Button class for text buttons
 class Button:
@@ -95,6 +95,7 @@ class Button:
         pygame.draw.rect(screen, color, self.rect)
         screen.blit(self.txt_surface, (self.rect.x + (self.rect.width - self.txt_surface.get_width()) // 2,
                                        self.rect.y + (self.rect.height - self.txt_surface.get_height()) // 2))
+
 
 # Input box class for text input
 class InputBox:
@@ -150,7 +151,7 @@ def exit_game():
 
 # Function for connecting to the server
 def connect():
-    global host, player_name, texts, buttons, input_boxes, connection, channel
+    global host, player_name, texts, buttons, input_boxes, connection, channel, current_state
     for box in input_boxes:
         player_name = box.text
     if host == '':
@@ -193,9 +194,10 @@ def start_session():
         texts = ['Error starting session!']
         buttons = [button_exit]
 
+
 # Function for handling server response
 def on_response(ch, method, properties, body):
-    global opponent, p_id, player_name, channel
+    global opponent, p_id, player_name, channel, current_state
     try:
         opponent, p_id = body.decode().split(",")
         print(f"DEBUG: Playing against: {opponent}!")
@@ -211,58 +213,39 @@ def on_response(ch, method, properties, body):
 
 
 def winner(ch, method, properties, body):
-    global connection, channel, texts, buttons, screen, opponent
+    global connection, channel, texts, buttons, screen, opponent, current_state
     try:
         win, mov, y_score, op_score = body.decode().split(",")
         print(f"DEBUG: {opponent} chose: {mov}")
-        if win == "Tie":
+        if win == 'Tie':
             print("DEBUG: It's a tie!")
-            texts = [f"It's a tie! Score: You  {y_score} : {op_score}  {opponent} \n Do you want to play again?"]
-            buttons = [button_no, button_yes]
-            for text in texts:
-                draw_text(screen, text, LARGE_FONT, TEXT_COLOR, (WIDTH / 2, HEIGHT / 4))
-
-            for button in buttons:
-                button.update()
-                button.draw(screen)
-            pygame.display.flip()
-            main()
+            texts = [f"It's a tie!", f"Score: You {y_score} : {op_score} {opponent}",
+                     "Do you want to play again?"]
         elif win == opponent:
             print(f"DEBUG: {win} wins!")
-            texts = [f"{win} wins! Score: You  {y_score} : {op_score}  {opponent} \n Do you want to play again?"]
-            buttons = [button_no, button_yes]
-            for text in texts:
-                draw_text(screen, text, LARGE_FONT, TEXT_COLOR, (WIDTH / 2, HEIGHT / 4))
-
-            for button in buttons:
-                button.update()
-                button.draw(screen)
-            pygame.display.flip()
-            main()
+            texts = [f"{win} wins!", f"Score: You {y_score} : {op_score} {opponent}",
+                     "Do you want to play again?"]
         else:
             print("DEBUG: You win!")
-        print(f"DEBUG: ---Score--- \nYou  {y_score} : {op_score}  {opponent}")
-        texts = [f"You win! Score: You  {y_score} : {op_score}  {opponent} \n Do you want to play again?"]
-        buttons = [button_no, button_yes]
-        for text in texts:
-            draw_text(screen, text, LARGE_FONT, TEXT_COLOR, (WIDTH / 2, HEIGHT / 4))
+            texts = ["You win!", f"Score: You {y_score} : {op_score} {opponent}",
+                     "Do you want to play again?"]
 
-        for button in buttons:
-            button.update()
-            button.draw(screen)
-        pygame.display.flip()
+        buttons = [button_no, button_yes]
+        current_state = 'end_round'
         main()
     except Exception as e:
         print(f"ERROR: Error in winner callback: {e},{traceback.format_exc()}")
 
 
 def endof_round():
+    global current_state
     try:
         connection.close()
         print("DEBUG: Exiting... Goodbye!")
         exit()
     except:
         return
+
 
 def send_input():
     global connection, player_input, opponent, texts, buttons, channel, is_clicked
@@ -276,25 +259,15 @@ def send_input():
     except Exception as e:
         print(f"ERROR: Error in send_input: {e}")
 
+
 # Starting game
 def start_game():
-    global buttons, texts
+    global buttons, texts, current_state
     print("DEBUG: Entering start_game function")
     texts = ["Your turn!"]
     buttons = [rock_button, paper_button, scissors_button]
-    screen.fill(BACKGROUND)
-    for text in texts:
-        draw_text(screen, text, LARGE_FONT, TEXT_COLOR, (WIDTH / 2, HEIGHT / 4))
-
-    for button in buttons:
-        button.update()
-        button.draw(screen)
-    pygame.display.flip()
-    try:
-        main()
-    except:
-        return
-
+    current_state = 'game'
+    main()
 
 
 # Functions for handling player choices
@@ -305,12 +278,14 @@ def on_rock():
     is_clicked = True
     send_input()
 
+
 def on_paper():
     global player_input, is_clicked
     player_input = 'p'
     print("DEBUG: Player chose paper")
     is_clicked = True
     send_input()
+
 
 def on_scissors():
     global player_input, is_clicked
@@ -320,7 +295,6 @@ def on_scissors():
     send_input()
 
 
-
 # Function to define a session
 def define_session():
     global input_boxes, buttons, texts
@@ -328,6 +302,7 @@ def define_session():
     texts = ["Connect to session:"]
     box = InputBox(300, 200, 200, 50)
     input_boxes = [box]
+
 
 # Function to set player name
 def set_name():
@@ -350,8 +325,8 @@ scissors_button = ImageButton(550, 250, scissors_img, on_scissors)
 button_sethost = Button(350, 300, 100, 50, "Ok", BUTTON_COLOR, GREY, set_name)
 button_name = Button(350, 300, 100, 50, "Ok", BUTTON_COLOR, GREY, connect)
 button_session = Button(350, 300, 100, 50, "Ok", BUTTON_COLOR, GREY, start_session)
-button_no = Button(WIDTH / 4, 200, 150, 50, "Start", BUTTON_COLOR, GREY, endof_round)
-button_yes = Button(WIDTH / 2, 200, 150, 50, "Exit", BUTTON_COLOR, GREY, start_game)
+button_no = Button(WIDTH / 4, 400, 150, 50, "No", BUTTON_COLOR, GREY, endof_round)
+button_yes = Button(WIDTH / 2, 400, 150, 50, "Yes", BUTTON_COLOR, GREY, start_game)
 
 # Initial texts and buttons
 texts = ["Rock Paper Scissors"]
@@ -361,7 +336,7 @@ input_boxes = []
 
 # Main function
 def main():
-    global running
+    global running, current_state
     running = True
     clock = pygame.time.Clock()
     while running:
@@ -393,78 +368,6 @@ def main():
     pygame.quit()
     sys.exit()
 
+
 if __name__ == "__main__":
     main()
-
-
-
-def play():
-    #print('Welcome to simple online "ROCK PAPER SCISSORS" game!')
-    host = input('Connect to host, for localhost press enter: ')
-    if host == "":
-        host = 'localhost'
-    try:
-        connection = pika.BlockingConnection(pika.ConnectionParameters(host=host))
-        channel = connection.channel()
-        print(f'Successfully connected to: {host}')
-    except:
-        print('Cannot connect to host!')
-        exit()
-
-    def on_response(ch, method, properties, body):
-        opponent, p_id = body.decode().split(",")
-        print(f"Playing against: {opponent}!")
-        #ch.basic_ack(delivery_tag=method.delivery_tag)
-        channel.queue_declare(queue=f"{player_name}{session_id}{p_id}")
-        channel.queue_declare(queue=f"{player_name}{p_id}won")
-        def play_round():
-            print('Please enter "r" for rock "p" for paper and "s" for scissors')
-            player_input = input("Your choice: ")
-            channel.basic_publish(exchange='',
-                                  routing_key=f"{player_name}{session_id}{p_id}",
-                                  body=player_input)
-
-            def winner(ch, method, properties, body):
-                win, mov, y_score, op_score = body.decode().split(",")
-                print(f"{opponent} chose: {mov}")
-                #ch.basic_ack(delivery_tag=method.delivery_tag)
-                if win == "Tie":
-                    print("It's a tie!")
-                elif win == opponent:
-                    print(f"{win} wins!")
-                else:
-                    print("You win!")
-                print(f"---Score--- \nYou  {y_score} : {op_score}  {opponent}")
-                play_again = input('Do you want to play again? y/n: ')
-                if play_again == 'n':
-                    connection.close()
-                    print("Exiting... Goodbye!")
-                    exit()
-                else:
-                    play_round()
-
-            channel.basic_consume(queue=f"{player_name}{p_id}won", on_message_callback=winner, auto_ack=True)
-        play_round()
-
-    player_name = input('Set your name: ')
-    if player_name == '': player_name = input('Name cannot be null! ')
-    session_id = input('Connect to session: ')
-    if session_id == '':
-        print('You have to provide session id! Now exiting....')
-        exit()
-
-    channel.queue_declare(queue='start')
-    channel.basic_publish(exchange='',
-                          routing_key='start',
-                          body=f"{session_id},{player_name}")
-    channel.queue_declare(queue=player_name)
-    channel.basic_consume(queue=player_name, on_message_callback=on_response, auto_ack=True)
-    print("Message to server sent")
-
-    print("Waiting for response...")
-    channel.start_consuming()
-
-
-#if __name__ == "__main__":
-    #play()
-    #main()
