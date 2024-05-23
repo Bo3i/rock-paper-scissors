@@ -1,6 +1,5 @@
 import sys
 import threading
-
 import pygame
 import pika
 import traceback
@@ -204,8 +203,8 @@ def on_response(ch, method, properties, body):
         opponent, p_id = body.decode().split(",")
         print(f"DEBUG: Playing against: {opponent}!")
 
-        channel.queue_declare(queue=f"{player_name}{session_id}{p_id}")
-        channel.queue_declare(queue=f"{player_name}{p_id}won")
+        # channel.queue_declare(queue=f"{player_name}{session_id}{p_id}")
+        # channel.queue_declare(queue=f"{player_name}{p_id}won")
 
         start_game()
     except Exception as e:
@@ -249,10 +248,6 @@ def endof_round():
         exit()
     except:
         return
-
-
-def test_callback(ch, method, properties, body):
-    print('recieved winner from server')
 
 
 def consume_from_queue(queue_name, callback):
