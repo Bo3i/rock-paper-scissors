@@ -44,7 +44,7 @@ def callback(ch, method, properties, body):
 def start_game(session_id, score):
     player1_move, player2_move = '', ''
     recieved = [0, 0]
-    #print(f"recieved: {recieved}")
+    print(f"recieved: {recieved}")
 
     def recieve1(ch, method, properties, body):
         nonlocal player1_move, recieved
@@ -53,12 +53,12 @@ def start_game(session_id, score):
         #ch.basic_ack(delivery_tag=method.delivery_tag)
         recieved[0] += 1
         if recieved[0] == recieved[1] and recieved[0]+recieved[1] != 0:
-            print(f"Recieved: {recieved}")
+            #print(f"Recieved: {recieved}")
             print('Now checking the winner')
             play()
         else:
             print('Waiting for all to respond')
-            print(f"Recieved: {recieved}")
+            #print(f"Recieved: {recieved}")
 
     def recieve2(ch, method, properties, body):
         nonlocal player2_move, recieved
@@ -67,12 +67,12 @@ def start_game(session_id, score):
         #ch.basic_ack(delivery_tag=method.delivery_tag)
         recieved[1] += 1
         if recieved[0] == recieved[1] and recieved[0]+recieved[1] != 0:
-            print(f"Recieved: {recieved}")
+            #print(f"Recieved: {recieved}")
             print('Checking the winner')
             play()
         else:
             print('Waiting for all to respond')
-            print(f"Recieved: {recieved}")
+            #print(f"Recieved: {recieved}")
 
     player1_name = sessions[session_id][0]
     player2_name = sessions[session_id][1]
@@ -95,12 +95,30 @@ def start_game(session_id, score):
                 winner = player2_name
                 score[1] += 1
             print(f"Player {winner} won!")
+
+            player1_queue = f'{player1_name}0won'
+            player2_queue = f'{player2_name}1won'
+
+            channel.queue_declare(queue=player1_queue)
+            channel.queue_declare(queue=player2_queue)
+
+            print(f'queue1: {player1_queue}')
+            print(f'queue2: {player2_queue}')
+
+            channel.basic_publish(
+                exchange='',
+                routing_key=player1_queue,
+                body=f"{winner}, {player2_move}, {score[0]}, {score[1]}"
+            )
+            channel.queue_declare(queue='test')
             channel.basic_publish(exchange='',
-                                  routing_key=f"{player1_name}0won",
-                                  body=f"{winner}, {player2_move}, {score[0]}, {score[1]}")
-            channel.basic_publish(exchange='',
-                                  routing_key=f"{player2_name}1won",
-                                  body=f"{winner}, {player1_move}, {score[1]}, {score[0]}")
+                                  routing_key='test',
+                                  body='testowa wiadomość')
+            channel.basic_publish(
+                exchange='',
+                routing_key=player2_queue,
+                body=f"{winner}, {player1_move}, {score[1]}, {score[0]}"
+            )
             print("Starting new round")
             start_game(session_id, score)
         else:

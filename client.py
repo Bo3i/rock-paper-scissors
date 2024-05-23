@@ -1,4 +1,6 @@
 import sys
+import threading
+
 import pygame
 import pika
 import traceback
@@ -6,8 +8,8 @@ import traceback
 pygame.init()
 
 # Constants
-WIDTH = 800
-HEIGHT = 600
+WIDTH = 700
+HEIGHT = 400
 WHITE = (255, 255, 255)
 BACKGROUND = (245, 235, 224)
 BUTTON_COLOR = (154, 154, 132)
@@ -183,11 +185,11 @@ def start_session():
         channel.basic_publish(exchange='',
                               routing_key='start',
                               body=f"{session_id},{player_name}")
-        channel.queue_declare(queue=player_name)
-        channel.basic_consume(queue=player_name, on_message_callback=on_response, auto_ack=True)
+
+        threading.Thread(target=consume_from_queue, args=(f'{player_name}', on_response)).start()
+
         print("DEBUG: Message to server sent")
         print("DEBUG: Waiting for response...")
-        channel.start_consuming()
 
     except Exception as e:
         print(f"ERROR: Error starting session: {e}")
@@ -214,9 +216,11 @@ def on_response(ch, method, properties, body):
 
 def winner(ch, method, properties, body):
     global connection, channel, texts, buttons, screen, opponent, current_state
+    print("recieved result from server")
     try:
         win, mov, y_score, op_score = body.decode().split(",")
         print(f"DEBUG: {opponent} chose: {mov}")
+        print(mov)
         if win == 'Tie':
             print("DEBUG: It's a tie!")
             texts = [f"It's a tie!", f"Score: You {y_score} : {op_score} {opponent}",
@@ -247,14 +251,30 @@ def endof_round():
         return
 
 
+def test_callback(ch, method, properties, body):
+    print('recieved winner from server')
+
+
+def consume_from_queue(queue_name, callback):
+    global connection, channel
+    connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+    channel = connection.channel()
+
+    channel.queue_declare(queue=queue_name)
+    channel.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=True)
+
+    channel.start_consuming()
+
+
 def send_input():
     global connection, player_input, opponent, texts, buttons, channel, is_clicked
     try:
         if is_clicked:
+            threading.Thread(target=consume_from_queue, args=(f"{player_name}{p_id}won", winner)).start()
             channel.basic_publish(exchange='',
                                   routing_key=f"{player_name}{session_id}{p_id}",
                                   body=player_input)
-            channel.basic_consume(queue=f"{player_name}{p_id}won", on_message_callback=winner, auto_ack=True)
+            print(f'queue: {player_name}{p_id}won')
             is_clicked = False
     except Exception as e:
         print(f"ERROR: Error in send_input: {e}")
@@ -339,6 +359,7 @@ def main():
     global running, current_state
     running = True
     clock = pygame.time.Clock()
+
     while running:
         screen.fill(BACKGROUND)
 
