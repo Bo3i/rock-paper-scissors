@@ -7,8 +7,8 @@ import traceback
 pygame.init()
 
 # Constants
-WIDTH = 700
-HEIGHT = 400
+WIDTH = 800
+HEIGHT = 600
 WHITE = (255, 255, 255)
 BACKGROUND = (245, 235, 224)
 BUTTON_COLOR = (154, 154, 132)

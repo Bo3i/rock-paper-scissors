@@ -46,7 +46,7 @@ def start_game(session_id, score):
     recieved = [0, 0]
     print(f"recieved: {recieved}")
 
-    def recieve(ch, method, properties, body):
+    def recieve1(ch, method, properties, body):
         nonlocal player1_move, recieved
         player1_move = body.decode()
         print(f"Recieved {player1_move} form player {player1_name}")
