@@ -56,6 +56,7 @@ def draw_text(surface, text, font, color, pos):
 # Button class for image buttons
 class ImageButton:
     def __init__(self, x, y, image, callback):
+        
         self.image = image
         self.rect = self.image.get_rect(topleft=(x, y))
         self.callback = callback
@@ -232,7 +233,7 @@ def winner(ch, method, properties, body):
             print("DEBUG: You win!")
             texts = ["You win!", f"Score: You {y_score} : {op_score} {opponent}",
                      "Do you want to play again?"]
-
+        screen.fill(BACKGROUND)
         buttons = [button_no, button_yes]
         current_state = 'end_round'
         main()
@@ -245,7 +246,7 @@ def endof_round():
     try:
         connection.close()
         print("DEBUG: Exiting... Goodbye!")
-        exit()
+        pygame.quit()
     except:
         return
 
@@ -340,8 +341,8 @@ scissors_button = ImageButton(550, 250, scissors_img, on_scissors)
 button_sethost = Button(350, 300, 100, 50, "Ok", BUTTON_COLOR, GREY, set_name)
 button_name = Button(350, 300, 100, 50, "Ok", BUTTON_COLOR, GREY, connect)
 button_session = Button(350, 300, 100, 50, "Ok", BUTTON_COLOR, GREY, start_session)
-button_no = Button(WIDTH / 4, 400, 150, 50, "No", BUTTON_COLOR, GREY, endof_round)
-button_yes = Button(WIDTH / 2, 400, 150, 50, "Yes", BUTTON_COLOR, GREY, start_game)
+button_no = Button(WIDTH / 4, 300, 150, 50, "No", BUTTON_COLOR, GREY, endof_round)
+button_yes = Button(WIDTH / 2, 300, 150, 50, "Yes", BUTTON_COLOR, GREY, start_game)
 
 # Initial texts and buttons
 texts = ["Rock Paper Scissors"]
