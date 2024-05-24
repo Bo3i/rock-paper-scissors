@@ -432,7 +432,7 @@ def main():
                 box.handle_event(event)
             if len(input_boxes) != 0:
                 if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_RETURN:
+                    if event.key == pygame.K_RETURN or event.key == pygame.K_KP_ENTER:
                            for button in buttons:
                                button.callback()
 
