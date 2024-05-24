@@ -54,22 +54,35 @@ def draw_text(surface, text, font, color, pos):
 
 
 # Button class for image buttons
+
 class ImageButton:
-    def __init__(self, x, y, image, callback):
+    def __init__(self, x, y, image, callback, border_color=TEXT_COLOR, border_width=2):
         self.image = image
         self.rect = self.image.get_rect(topleft=(x, y))
         self.callback = callback
+        self.border_color = border_color
+        self.border_width = border_width
+        self.hovered = False
 
     def handle_event(self, event):
+        global is_clicked
         if event.type == pygame.MOUSEBUTTONDOWN:
-            if self.rect.collidepoint(event.pos):
+            if self.rect.collidepoint(event.pos) and not is_clicked:
                 self.callback()
 
-    def draw(self, screen):
-        screen.blit(self.image, self.rect.topleft)
-
     def update(self):
-        pass
+        global is_clicked
+        if not is_clicked:
+            self.hovered = self.rect.collidepoint(pygame.mouse.get_pos())
+
+
+    def draw(self, screen):
+        if self.hovered:
+            # Draw the border when hovered
+            pygame.draw.rect(screen, self.border_color,
+                                self.rect.inflate(self.border_width * 2, self.border_width * 2), self.border_width)
+        # Draw the image
+        screen.blit(self.image, self.rect.topleft)
 
 
 # Button class for text buttons
@@ -108,6 +121,7 @@ class InputBox:
         self.active = False
 
     def handle_event(self, event):
+
         if event.type == pygame.MOUSEBUTTONDOWN:
             if self.rect.collidepoint(event.pos):
                 self.active = not self.active
@@ -134,13 +148,7 @@ class InputBox:
         pygame.draw.rect(screen, self.color, self.rect, 2)
 
 
-# Function to initialize the game
-def init_game():
-    global buttons, texts, input_boxes
-    texts = ["Connect to host, for localhost press ok"]
-    buttons = [button_sethost]
-    box = InputBox(300, 200, 200, 50)
-    input_boxes = [box]
+
 
 
 # Function to exit the game
@@ -154,7 +162,10 @@ def exit_game():
 def connect():
     global host, player_name, texts, buttons, input_boxes, connection, channel, current_state
     for box in input_boxes:
-        player_name = box.text
+        if box.text != '':
+            player_name = box.text
+        else:
+            set_name()
     if host == '':
         host = 'localhost'
     print(f"DEBUG: Connecting to host: {host}")
@@ -170,11 +181,24 @@ def connect():
         buttons = [button_exit]
 
 
+# Function to initialize the game
+def init_game():
+    global buttons, texts, input_boxes
+    texts = ["Connect to host, for localhost press enter"]
+    buttons = [button_sethost]
+    box = InputBox(300, 200, 200, 50)
+    input_boxes = [box]
+
+
+
 # Function for starting new session
 def start_session():
     global input_boxes, buttons, texts, session_id, channel, connection
     for box in input_boxes:
-        session_id = box.text
+        if box.text != '':
+            session_id = box.text
+        else:
+            define_session()
 
     input_boxes = []
     buttons = []
@@ -214,26 +238,31 @@ def on_response(ch, method, properties, body):
 
 
 def winner(ch, method, properties, body):
-    global connection, channel, texts, buttons, screen, opponent, current_state
+    global connection, channel, texts, buttons, screen, opponent, current_state, your_s, their_s
     print("recieved result from server")
     try:
         win, mov, y_score, op_score = body.decode().split(",")
+        your_s = y_score
+        their_s = op_score
         print(f"DEBUG: {opponent} chose: {mov}")
         print(mov)
         if win == 'Tie':
             print("DEBUG: It's a tie!")
-            texts = [f"It's a tie!", f"Score: You {y_score} : {op_score} {opponent}",
-                     "Do you want to play again?"]
+            texts = [f"It's a tie!", f"Score: You {y_score} : {op_score} {opponent}", "Do you want to play again?"]
         elif win == opponent:
             print(f"DEBUG: {win} wins!")
-            texts = [f"{win} wins!", f"Score: You {y_score} : {op_score} {opponent}",
-                     "Do you want to play again?"]
+            texts = [f"{win} wins!", f"Score: You {y_score} : {op_score} {opponent}", "Do you want to play again?"]
         else:
             print("DEBUG: You win!")
-            texts = ["You win!", f"Score: You {y_score} : {op_score} {opponent}",
-                     "Do you want to play again?"]
-
-        buttons = [button_no, button_yes]
+            texts = ["You win!", f"Score: You {y_score} : {op_score} {opponent}", "Do you want to play again?"]
+        screen.fill(BACKGROUND)
+        button_menu.rect.x = 125
+        button_no.rect.x = 325
+        button_yes.rect.x = 525
+        button_menu.rect.y = 500
+        button_no.rect.y = 500
+        button_yes.rect.y = 500
+        buttons = [button_no, button_yes, button_menu]
         current_state = 'end_round'
         main()
     except Exception as e:
@@ -241,13 +270,16 @@ def winner(ch, method, properties, body):
 
 
 def endof_round():
-    global current_state
+    global current_state, connection
     try:
         connection.close()
         print("DEBUG: Exiting... Goodbye!")
-        exit()
+        pygame.quit()
+        sys.exit()
     except:
-        return
+
+        pygame.quit()
+        sys.exit()
 
 
 def consume_from_queue(queue_name, callback):
@@ -270,17 +302,21 @@ def send_input():
                                   routing_key=f"{player_name}{session_id}{p_id}",
                                   body=player_input)
             print(f'queue: {player_name}{p_id}won')
-            is_clicked = False
+            #is_clicked = False
     except Exception as e:
         print(f"ERROR: Error in send_input: {e}")
 
 
 # Starting game
 def start_game():
-    global buttons, texts, current_state
+    global buttons, texts, current_state, is_clicked, opponent, your_s, their_s
     print("DEBUG: Entering start_game function")
-    texts = ["Your turn!"]
-    buttons = [rock_button, paper_button, scissors_button]
+    texts = [f"Score: You {your_s} : {their_s} {opponent}"]
+    button_exit.rect.x = 200
+    button_exit.rect.y = 450
+    button_menu.rect.x = 400
+    button_menu.rect.y = 450
+    buttons = [rock_button, paper_button, scissors_button, button_exit, button_menu]
     current_state = 'game'
     main()
 
@@ -317,6 +353,7 @@ def define_session():
     texts = ["Connect to session:"]
     box = InputBox(300, 200, 200, 50)
     input_boxes = [box]
+    main()
 
 
 # Function to set player name
@@ -329,6 +366,17 @@ def set_name():
     buttons = [button_name]
     box = InputBox(300, 200, 200, 50)
     input_boxes = [box]
+    main()
+
+def menu():
+    global connection, texts, buttons, input_boxes
+
+    texts = ["Rock Paper Scissors"]
+    button_exit.rect.x = WIDTH/2
+    button_exit.rect.y = 200
+    buttons = [button_start, button_exit]
+    input_boxes = []
+    main()
 
 
 # Create buttons
@@ -340,14 +388,16 @@ scissors_button = ImageButton(550, 250, scissors_img, on_scissors)
 button_sethost = Button(350, 300, 100, 50, "Ok", BUTTON_COLOR, GREY, set_name)
 button_name = Button(350, 300, 100, 50, "Ok", BUTTON_COLOR, GREY, connect)
 button_session = Button(350, 300, 100, 50, "Ok", BUTTON_COLOR, GREY, start_session)
-button_no = Button(WIDTH / 4, 400, 150, 50, "No", BUTTON_COLOR, GREY, endof_round)
-button_yes = Button(WIDTH / 2, 400, 150, 50, "Yes", BUTTON_COLOR, GREY, start_game)
+button_no = Button(WIDTH / 6, 500, 150, 50, "No", BUTTON_COLOR, GREY, endof_round)
+button_yes = Button(WIDTH / 4, 500, 150, 50, "Yes", BUTTON_COLOR, GREY, start_game)
+button_menu = Button(WIDTH / 2, 500, 150, 50, "Menu", BUTTON_COLOR, GREY, menu)
 
 # Initial texts and buttons
 texts = ["Rock Paper Scissors"]
 buttons = [button_start, button_exit]
 input_boxes = []
-
+your_s = 0
+their_s = 0
 
 # Main function
 def main():
@@ -357,9 +407,11 @@ def main():
 
     while running:
         screen.fill(BACKGROUND)
-
+        i = 0
         for text in texts:
-            draw_text(screen, text, LARGE_FONT, TEXT_COLOR, (WIDTH / 2, HEIGHT / 4))
+
+            draw_text(screen, text, LARGE_FONT, TEXT_COLOR, (WIDTH / 2, 150+i))
+            i += 100
 
         for button in buttons:
             button.update()
@@ -378,6 +430,11 @@ def main():
                 button.handle_event(event)
             for box in input_boxes:
                 box.handle_event(event)
+            if len(input_boxes) != 0:
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_RETURN:
+                           for button in buttons:
+                               button.callback()
 
         clock.tick(30)
 
