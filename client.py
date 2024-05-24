@@ -184,7 +184,7 @@ def connect():
 # Function to initialize the game
 def init_game():
     global buttons, texts, input_boxes
-    texts = ["Connect to host, for localhost press space"]
+    texts = ["Connect to host, for localhost press enter"]
     buttons = [button_sethost]
     box = InputBox(300, 200, 200, 50)
     input_boxes = [box]
@@ -432,7 +432,7 @@ def main():
                 box.handle_event(event)
             if len(input_boxes) != 0:
                 if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_SPACE:
+                    if event.key == pygame.K_RETURN:
                            for button in buttons:
                                button.callback()
 
