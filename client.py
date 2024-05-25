@@ -11,7 +11,7 @@ import game_components as gc
 pygame.init()
 pygame.mixer.init()
 pygame.mixer.music.load("Atmospheric-ambient-music.wav")
-# pygame.mixer.music.play(-1)
+pygame.mixer.music.play(-1)
 
 
 # Constants
@@ -148,7 +148,7 @@ def on_response(ch, method, properties, body):
 
 
 def winner(ch, method, properties, body):
-    global connection, channel, texts, buttons, screen, opponent, current_state, your_s, their_s
+    global connection, channel, texts, buttons, screen, opponent, current_state, your_s, their_s, is_clicked
     print("recieved result from server")
     try:
         win, mov, y_score, op_score = body.decode().split(",")
@@ -172,8 +172,9 @@ def winner(ch, method, properties, body):
         button_menu.rect.y = 500
         button_no.rect.y = 500
         button_yes.rect.y = 500
-        buttons = [button_no, button_yes, button_menu]
+        buttons = [button_yes, button_menu]
         current_state = 'end_round'
+        is_clicked = False
         main()
     except Exception as e:
         print(f"ERROR: Error in winner callback: {e},{traceback.format_exc()}")
@@ -187,7 +188,6 @@ def endof_round():
         pygame.quit()
         sys.exit()
     except:
-
         pygame.quit()
         sys.exit()
 
@@ -240,7 +240,7 @@ def send_input():
             channel.basic_publish(exchange='',
                                   routing_key=f"q{player_name}{session_id}{p_id}",
                                   body=player_input)
-            print(f'queue: q{player_name}{p_id}won')
+            # print(f'queue: q{player_name}{p_id}won')
             #is_clicked = False
     except Exception as e:
         print(f"ERROR: Error in send_input: {e}")
@@ -382,7 +382,7 @@ def main():
 
     stop_event.set()
     for consumer in consumers:
-        consumer.join()
+        consumer.stop()
 
     pygame.quit()
     sys.exit()
