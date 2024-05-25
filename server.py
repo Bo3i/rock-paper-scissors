@@ -36,14 +36,17 @@ def callback(ch, method, properties, body):
             channel.queue_declare(queue=f"q{player}{session_id}{p_id}")
             channel.queue_declare(queue=f"q{player}{p_id}won")
             channel.basic_publish(exchange='',
-                                  routing_key=player,
+                                  routing_key=f"q{player}",
                                   body=f"{opponent},{p_id}")
+            print(f"Sent {opponent},{p_id} to q{player}")
         start_game(session_id, [0, 0])
 
 
 def start_game(session_id, score):
+    print("Starting new round")
     player1_move, player2_move = '', ''
     recieved = [0, 0]
+    print("Waiting for players")
     print(f"recieved: {recieved}")
 
     def recieve1(ch, method, properties, body):
@@ -112,10 +115,6 @@ def start_game(session_id, score):
                 routing_key=player1_queue,
                 body=f"{winner}, {player2_move}, {score[0]}, {score[1]}"
             )
-            channel.queue_declare(queue='test')
-            channel.basic_publish(exchange='',
-                                  routing_key='test',
-                                  body='testowa wiadomość')
             channel.basic_publish(
                 exchange='',
                 routing_key=player2_queue,

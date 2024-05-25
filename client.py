@@ -122,6 +122,8 @@ def start_session():
         print("DEBUG: Message to server sent")
         print("DEBUG: Waiting for response...")
 
+        texts = ["Waiting for the game to start..."]
+
     except Exception as e:
         print(f"ERROR: Error starting session: {e}")
         texts = ['Error starting session!']
@@ -208,9 +210,9 @@ class Consumer(threading.Thread):
             if method_frame:
                 print(f"Received message: {body}")
                 self.channel.basic_ack(method_frame.delivery_tag)
-                self.callback()
-            else:
-                time.sleep(1)
+                self.callback(self.channel, method_frame, header_frame, body)
+            # else:
+            #     time.sleep(1)
 
     def stop(self):
         self.stop_event.set()
