@@ -131,6 +131,7 @@ def start_session():
         texts = ['Error starting session!']
         buttons = [button_exit]
 
+
 def on_connect(ch, method, properties, body):
     global texts, buttons
     mess = body.decode()

@@ -27,6 +27,9 @@ def callback(ch, method, properties, body):
                                   body='1')
     else:
         sessions[session_id] = [player_name]
+        channel.basic_publish(exchange='',
+                              routing_key=f"q{player_name}{session_id}status",
+                              body='0')
 
     if len(sessions[session_id]) == 2:
         print("Session", session_id, "is ready with players:", sessions[session_id])
