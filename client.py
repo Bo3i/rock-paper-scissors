@@ -59,9 +59,13 @@ current_state = 'main_menu'  # Initial state
 # Function to exit the game
 def exit_game():
     global running
+
+
+
     running = False
 
     print("DEBUG: Exiting game")
+
 
 
 # Function for connecting to the server
@@ -114,21 +118,31 @@ def start_session():
                               routing_key='start',
                               body=f"{session_id},{player_name}")
 
-        conn_consumer = Consumer(f'q{player_name}', host, on_response, stop_event)
+        conn_consumer = Consumer(f"q{player_name}{session_id}status", host, on_connect, stop_event)
         conn_consumer.start()
         consumers.append(conn_consumer)
-        #threading.Thread(target=consume_from_queue, args=(f'{player_name}', on_response)).start()
 
-        print("DEBUG: Message to server sent")
-        print("DEBUG: Waiting for response...")
+        print(f"Connecting to session: {session_id} ...")
 
-        texts = ["Waiting for the game to start..."]
+        texts = [f"Connecting to session: {session_id} ..."]
 
     except Exception as e:
         print(f"ERROR: Error starting session: {e}")
         texts = ['Error starting session!']
         buttons = [button_exit]
 
+def on_connect(ch, method, properties, body):
+    global texts, buttons
+    mess = body.decode()
+    print(f"recieved: {mess}")
+    if mess == "0":
+        conn_consumer = Consumer(f'q{player_name}', host, on_response, stop_event)
+        conn_consumer.start()
+        consumers.append(conn_consumer)
+        texts = ["Waiting for other player..."]
+    elif mess == "1":
+        texts = [f"Session: {session_id} is full"]
+        buttons = [button_menu]
 
 # Function for handling server response
 def on_response(ch, method, properties, body):
@@ -203,8 +217,7 @@ class Consumer(threading.Thread):
         self.callback = callback
 
     def run(self):
-        # channel.basic_consume(queue=self.queue_name, on_message_callback=self.callback, auto_ack=True)
-        # channel.start_consuming()
+
         while not self.stop_event.is_set():
             method_frame, header_frame, body = self.channel.basic_get(self.queue_name)
             if method_frame:
@@ -236,12 +249,10 @@ def send_input():
             input_consumer = Consumer(f"q{player_name}{p_id}won", host, winner, stop_event)
             input_consumer.start()
             consumers.append(input_consumer)
-            #threading.Thread(target=consume_from_queue, args=(f"{player_name}{p_id}won", winner)).start()
             channel.basic_publish(exchange='',
                                   routing_key=f"q{player_name}{session_id}{p_id}",
                                   body=player_input)
-            # print(f'queue: q{player_name}{p_id}won')
-            #is_clicked = False
+
     except Exception as e:
         print(f"ERROR: Error in send_input: {e}")
 
@@ -381,8 +392,7 @@ def main():
         clock.tick(30)
 
     stop_event.set()
-    for consumer in consumers:
-        consumer.stop()
+
 
     pygame.quit()
     sys.exit()

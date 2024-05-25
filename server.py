@@ -12,15 +12,19 @@ def callback(ch, method, properties, body):
     #ch.basic_ack(delivery_tag=method.delivery_tag)
 
     session_id, player_name = message.split(',')
+    channel.queue_declare(queue=f"q{player_name}{session_id}status")
 
     if session_id in sessions:
         if len(sessions[session_id]) < 2:
             sessions[session_id].append(player_name)
+            channel.basic_publish(exchange='',
+                                  routing_key=f"q{player_name}{session_id}status",
+                                  body='0')
         else:
             print("Session is full")
-            # channel.basic_publish(exchange='',
-            #                      routing_key=player_name,
-            #                      body='#ErR!')
+            channel.basic_publish(exchange='',
+                                  routing_key=f"q{player_name}{session_id}status",
+                                  body='1')
     else:
         sessions[session_id] = [player_name]
 
