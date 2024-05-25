@@ -33,8 +33,8 @@ def callback(ch, method, properties, body):
             else:
                 opponent = sessions[session_id][0]
                 p_id = 1
-            channel.queue_declare(queue=f"{player}{session_id}{p_id}")
-            channel.queue_declare(queue=f"{player}{p_id}won")
+            channel.queue_declare(queue=f"q{player}{session_id}{p_id}")
+            channel.queue_declare(queue=f"q{player}{p_id}won")
             channel.basic_publish(exchange='',
                                   routing_key=player,
                                   body=f"{opponent},{p_id}")
@@ -76,9 +76,11 @@ def start_game(session_id, score):
 
     player1_name = sessions[session_id][0]
     player2_name = sessions[session_id][1]
+    channel.queue_declare(f"q{player1_name}{session_id}0")
+    channel.queue_declare(f"q{player2_name}{session_id}1")
 
-    channel.basic_consume(queue=f"{player1_name}{session_id}0", on_message_callback=recieve1, auto_ack=True)
-    channel.basic_consume(queue=f"{player2_name}{session_id}1", on_message_callback=recieve2, auto_ack=True)
+    channel.basic_consume(queue=f"q{player1_name}{session_id}0", on_message_callback=recieve1, auto_ack=True)
+    channel.basic_consume(queue=f"q{player2_name}{session_id}1", on_message_callback=recieve2, auto_ack=True)
 
     def play():
         if player1_move != '' and player2_move != '':
@@ -96,8 +98,8 @@ def start_game(session_id, score):
                 score[1] += 1
             print(f"Player {winner} won!")
 
-            player1_queue = f'{player1_name}0won'
-            player2_queue = f'{player2_name}1won'
+            player1_queue = f'q{player1_name}0won'
+            player2_queue = f'q{player2_name}1won'
 
             channel.queue_declare(queue=player1_queue)
             channel.queue_declare(queue=player2_queue)

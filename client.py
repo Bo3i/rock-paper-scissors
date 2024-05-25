@@ -3,8 +3,16 @@ import threading
 import pygame
 import pika
 import traceback
+import time
+import signal
+import wave
+import game_components as gc
 
 pygame.init()
+pygame.mixer.init()
+pygame.mixer.music.load("Atmospheric-ambient-music.wav")
+# pygame.mixer.music.play(-1)
+
 
 # Constants
 WIDTH = 800
@@ -42,119 +50,17 @@ channel = None
 opponent = ''
 p_id = ''
 player_input = ''
+consumers = []
+stop_event = threading.Event()
 is_clicked = False
 current_state = 'main_menu'  # Initial state
-
-
-# Function to draw text on screen
-def draw_text(surface, text, font, color, pos):
-    text_object = font.render(text, True, color)
-    text_rect = text_object.get_rect(center=pos)
-    surface.blit(text_object, text_rect)
-
-
-# Button class for image buttons
-
-class ImageButton:
-    def __init__(self, x, y, image, callback, border_color=TEXT_COLOR, border_width=2):
-        self.image = image
-        self.rect = self.image.get_rect(topleft=(x, y))
-        self.callback = callback
-        self.border_color = border_color
-        self.border_width = border_width
-        self.hovered = False
-
-    def handle_event(self, event):
-        global is_clicked
-        if event.type == pygame.MOUSEBUTTONDOWN:
-            if self.rect.collidepoint(event.pos) and not is_clicked:
-                self.callback()
-
-    def update(self):
-        global is_clicked
-        if not is_clicked:
-            self.hovered = self.rect.collidepoint(pygame.mouse.get_pos())
-
-
-    def draw(self, screen):
-        if self.hovered:
-            # Draw the border when hovered
-            pygame.draw.rect(screen, self.border_color,
-                                self.rect.inflate(self.border_width * 2, self.border_width * 2), self.border_width)
-        # Draw the image
-        screen.blit(self.image, self.rect.topleft)
-
-
-# Button class for text buttons
-class Button:
-    def __init__(self, x, y, w, h, text, color, hover_color, callback):
-        self.rect = pygame.Rect(x, y, w, h)
-        self.color = color
-        self.hover_color = hover_color
-        self.text = text
-        self.txt_surface = FONT.render(text, True, WHITE)
-        self.callback = callback
-        self.hovered = False
-
-    def handle_event(self, event):
-        if event.type == pygame.MOUSEBUTTONDOWN:
-            if self.rect.collidepoint(event.pos):
-                self.callback()
-
-    def update(self):
-        self.hovered = self.rect.collidepoint(pygame.mouse.get_pos())
-
-    def draw(self, screen):
-        color = self.hover_color if self.hovered else self.color
-        pygame.draw.rect(screen, color, self.rect)
-        screen.blit(self.txt_surface, (self.rect.x + (self.rect.width - self.txt_surface.get_width()) // 2,
-                                       self.rect.y + (self.rect.height - self.txt_surface.get_height()) // 2))
-
-
-# Input box class for text input
-class InputBox:
-    def __init__(self, x, y, w, h, text=''):
-        self.rect = pygame.Rect(x, y, w, h)
-        self.color = BLACK
-        self.text = text
-        self.txt_surface = FONT.render(text, True, self.color)
-        self.active = False
-
-    def handle_event(self, event):
-
-        if event.type == pygame.MOUSEBUTTONDOWN:
-            if self.rect.collidepoint(event.pos):
-                self.active = not self.active
-            else:
-                self.active = False
-            self.color = GREY if self.active else BLACK
-        if event.type == pygame.KEYDOWN:
-            if self.active:
-                if event.key == pygame.K_RETURN:
-                    print(self.text)
-                    self.text = ''
-                elif event.key == pygame.K_BACKSPACE:
-                    self.text = self.text[:-1]
-                else:
-                    self.text += event.unicode
-                self.txt_surface = FONT.render(self.text, True, self.color)
-
-    def update(self):
-        width = max(200, self.txt_surface.get_width() + 10)
-        self.rect.w = width
-
-    def draw(self, screen):
-        screen.blit(self.txt_surface, (self.rect.x + 5, self.rect.y + 5))
-        pygame.draw.rect(screen, self.color, self.rect, 2)
-
-
-
 
 
 # Function to exit the game
 def exit_game():
     global running
     running = False
+
     print("DEBUG: Exiting game")
 
 
@@ -186,9 +92,8 @@ def init_game():
     global buttons, texts, input_boxes
     texts = ["Connect to host, for localhost press enter"]
     buttons = [button_sethost]
-    box = InputBox(300, 200, 200, 50)
+    box = gc.InputBox(300, 200, 200, 50, FONT)
     input_boxes = [box]
-
 
 
 # Function for starting new session
@@ -209,7 +114,10 @@ def start_session():
                               routing_key='start',
                               body=f"{session_id},{player_name}")
 
-        threading.Thread(target=consume_from_queue, args=(f'{player_name}', on_response)).start()
+        conn_consumer = Consumer(f'q{player_name}', host, on_response, stop_event)
+        conn_consumer.start()
+        consumers.append(conn_consumer)
+        #threading.Thread(target=consume_from_queue, args=(f'{player_name}', on_response)).start()
 
         print("DEBUG: Message to server sent")
         print("DEBUG: Waiting for response...")
@@ -227,8 +135,8 @@ def on_response(ch, method, properties, body):
         opponent, p_id = body.decode().split(",")
         print(f"DEBUG: Playing against: {opponent}!")
 
-        # channel.queue_declare(queue=f"{player_name}{session_id}{p_id}")
-        # channel.queue_declare(queue=f"{player_name}{p_id}won")
+        channel.queue_declare(queue=f"q{player_name}{session_id}{p_id}")
+        channel.queue_declare(queue=f"q{player_name}{p_id}won")
 
         start_game()
     except Exception as e:
@@ -282,6 +190,33 @@ def endof_round():
         sys.exit()
 
 
+class Consumer(threading.Thread):
+    def __init__(self, queue_name, host, callback, stop_event):
+        super().__init__()
+        self.queue_name = queue_name
+        self.stop_event = stop_event
+        self.connection = pika.BlockingConnection(pika.ConnectionParameters(host))
+        self.channel = self.connection.channel()
+        self.channel.queue_declare(queue=queue_name)
+        self.callback = callback
+
+    def run(self):
+        # channel.basic_consume(queue=self.queue_name, on_message_callback=self.callback, auto_ack=True)
+        # channel.start_consuming()
+        while not self.stop_event.is_set():
+            method_frame, header_frame, body = self.channel.basic_get(self.queue_name)
+            if method_frame:
+                print(f"Received message: {body}")
+                self.channel.basic_ack(method_frame.delivery_tag)
+                self.callback()
+            else:
+                time.sleep(1)
+
+    def stop(self):
+        self.stop_event.set()
+        self.connection.close()
+
+
 def consume_from_queue(queue_name, callback):
     global connection, channel
     connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
@@ -292,16 +227,18 @@ def consume_from_queue(queue_name, callback):
 
     channel.start_consuming()
 
-
 def send_input():
     global connection, player_input, opponent, texts, buttons, channel, is_clicked
     try:
         if is_clicked:
-            threading.Thread(target=consume_from_queue, args=(f"{player_name}{p_id}won", winner)).start()
+            input_consumer = Consumer(f"q{player_name}{p_id}won", host, winner, stop_event)
+            input_consumer.start()
+            consumers.append(input_consumer)
+            #threading.Thread(target=consume_from_queue, args=(f"{player_name}{p_id}won", winner)).start()
             channel.basic_publish(exchange='',
-                                  routing_key=f"{player_name}{session_id}{p_id}",
+                                  routing_key=f"q{player_name}{session_id}{p_id}",
                                   body=player_input)
-            print(f'queue: {player_name}{p_id}won')
+            print(f'queue: q{player_name}{p_id}won')
             #is_clicked = False
     except Exception as e:
         print(f"ERROR: Error in send_input: {e}")
@@ -311,7 +248,7 @@ def send_input():
 def start_game():
     global buttons, texts, current_state, is_clicked, opponent, your_s, their_s
     print("DEBUG: Entering start_game function")
-    texts = [f"Score: You {your_s} : {their_s} {opponent}"]
+    texts = [f"You {your_s} : {their_s} {opponent}"]
     button_exit.rect.x = 200
     button_exit.rect.y = 450
     button_menu.rect.x = 400
@@ -351,7 +288,7 @@ def define_session():
     global input_boxes, buttons, texts
     buttons = [button_session]
     texts = ["Connect to session:"]
-    box = InputBox(300, 200, 200, 50)
+    box = gc.InputBox(300, 200, 200, 50, FONT)
     input_boxes = [box]
     main()
 
@@ -364,9 +301,10 @@ def set_name():
 
     texts = ["What's your name?"]
     buttons = [button_name]
-    box = InputBox(300, 200, 200, 50)
+    box = gc.InputBox(300, 200, 200, 50, FONT)
     input_boxes = [box]
     main()
+
 
 def menu():
     global connection, texts, buttons, input_boxes
@@ -380,17 +318,17 @@ def menu():
 
 
 # Create buttons
-button_start = Button(WIDTH / 4, 200, 150, 50, "Start", BUTTON_COLOR, GREY, init_game)
-button_exit = Button(WIDTH / 2, 200, 150, 50, "Exit", BUTTON_COLOR, GREY, exit_game)
-rock_button = ImageButton(100, 250, rock_img, on_rock)
-paper_button = ImageButton(325, 250, paper_img, on_paper)
-scissors_button = ImageButton(550, 250, scissors_img, on_scissors)
-button_sethost = Button(350, 300, 100, 50, "Ok", BUTTON_COLOR, GREY, set_name)
-button_name = Button(350, 300, 100, 50, "Ok", BUTTON_COLOR, GREY, connect)
-button_session = Button(350, 300, 100, 50, "Ok", BUTTON_COLOR, GREY, start_session)
-button_no = Button(WIDTH / 6, 500, 150, 50, "No", BUTTON_COLOR, GREY, endof_round)
-button_yes = Button(WIDTH / 4, 500, 150, 50, "Yes", BUTTON_COLOR, GREY, start_game)
-button_menu = Button(WIDTH / 2, 500, 150, 50, "Menu", BUTTON_COLOR, GREY, menu)
+button_start = gc.Button(WIDTH / 4, 200, 150, 50, "Start", FONT, BUTTON_COLOR, GREY, init_game)
+button_exit = gc.Button(WIDTH / 2, 200, 150, 50, "Exit", FONT, BUTTON_COLOR, GREY, exit_game)
+rock_button = gc.ImageButton(100, 250, rock_img, on_rock)
+paper_button = gc.ImageButton(325, 250, paper_img, on_paper)
+scissors_button = gc.ImageButton(550, 250, scissors_img, on_scissors)
+button_sethost = gc.Button(350, 300, 100, 50, "Ok", FONT, BUTTON_COLOR, GREY, set_name)
+button_name = gc.Button(350, 300, 100, 50, "Ok", FONT, BUTTON_COLOR, GREY, connect)
+button_session = gc.Button(350, 300, 100, 50, "Ok", FONT, BUTTON_COLOR, GREY, start_session)
+button_no = gc.Button(WIDTH / 6, 500, 150, 50, "No", FONT, BUTTON_COLOR, GREY, endof_round)
+button_yes = gc.Button(WIDTH / 4, 500, 150, 50, "Yes", FONT, BUTTON_COLOR, GREY, start_game)
+button_menu = gc.Button(WIDTH / 2, 500, 150, 50, "Menu",  FONT, BUTTON_COLOR, GREY, menu)
 
 # Initial texts and buttons
 texts = ["Rock Paper Scissors"]
@@ -399,22 +337,24 @@ input_boxes = []
 your_s = 0
 their_s = 0
 
+
 # Main function
 def main():
     global running, current_state
     running = True
     clock = pygame.time.Clock()
 
+
     while running:
         screen.fill(BACKGROUND)
         i = 0
         for text in texts:
 
-            draw_text(screen, text, LARGE_FONT, TEXT_COLOR, (WIDTH / 2, 150+i))
+            gc.draw_text(screen, text, LARGE_FONT, TEXT_COLOR, (WIDTH / 2, 150+i))
             i += 100
 
         for button in buttons:
-            button.update()
+            button.update(is_clicked)
             button.draw(screen)
 
         for box in input_boxes:
@@ -427,16 +367,20 @@ def main():
             if event.type == pygame.QUIT:
                 running = False
             for button in buttons:
-                button.handle_event(event)
+                button.handle_event(event, is_clicked)
             for box in input_boxes:
                 box.handle_event(event)
             if len(input_boxes) != 0:
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_RETURN or event.key == pygame.K_KP_ENTER:
-                           for button in buttons:
-                               button.callback()
+                        for button in buttons:
+                            button.callback()
 
         clock.tick(30)
+
+    stop_event.set()
+    for consumer in consumers:
+        consumer.join()
 
     pygame.quit()
     sys.exit()
