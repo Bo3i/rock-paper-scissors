@@ -3,9 +3,7 @@ import threading
 import pygame
 import pika
 import traceback
-import time
 import signal
-import wave
 import game_components as gc
 
 pygame.init()
@@ -56,15 +54,6 @@ is_clicked = False
 current_state = 'main_menu'  # Initial state
 
 
-# Function to exit the game
-def exit_game():
-    global running
-
-
-
-    running = False
-
-    print("DEBUG: Exiting game")
 
 
 
@@ -90,6 +79,20 @@ def connect():
         texts = ['Cannot connect to host!']
         buttons = [button_exit]
 
+
+
+# Function to exit the game
+def exit_game():
+    global running,channel
+    channel.queue_declare(queue=f'q{player_name}{session_id}{p_id}quit')
+    channel.basic_publish(
+        exchange='',
+        routing_key=f'q{player_name}{session_id}{p_id}quit',
+        body=f'{p_id}{player_name}{session_id}'
+    )
+    running = False
+
+    print("DEBUG: Exiting game")
 
 # Function to initialize the game
 def init_game():
@@ -131,6 +134,13 @@ def start_session():
         texts = ['Error starting session!']
         buttons = [button_exit]
 
+def on_disconnect(ch, method, properties, body):
+    disc_id = body.decode()
+    if disc_id != p_id:
+        print(f'Opponent disconnected')
+        texts = ['Opponent disconnected', 'Waiting for player to join...']
+        buttons = [button_menu]
+
 
 def on_connect(ch, method, properties, body):
     global texts, buttons
@@ -140,6 +150,9 @@ def on_connect(ch, method, properties, body):
         conn_consumer = Consumer(f'q{player_name}', host, on_response, stop_event)
         conn_consumer.start()
         consumers.append(conn_consumer)
+        disconn_consumer = Consumer(f'q{session_id}discon', host, on_disconnect, stop_event)
+        disconn_consumer.start()
+        consumers.append(disconn_consumer)
         texts = ["Waiting for other player..."]
     elif mess == "1":
         texts = [f"Session: {session_id} is full"]
@@ -243,6 +256,7 @@ def consume_from_queue(queue_name, callback):
 
     channel.start_consuming()
 
+
 def send_input():
     global connection, player_input, opponent, texts, buttons, channel, is_clicked
     try:
@@ -321,8 +335,13 @@ def set_name():
 
 
 def menu():
-    global connection, texts, buttons, input_boxes
-
+    global connection, texts, buttons, input_boxes,channel
+    channel.queue_declare(queue=f'q{player_name}{session_id}{p_id}quit')
+    channel.basic_publish(
+        exchange='',
+        routing_key=f'q{player_name}{session_id}{p_id}quit',
+        body=f'{p_id}{player_name}{session_id}'
+    )
     texts = ["Rock Paper Scissors"]
     button_exit.rect.x = WIDTH/2
     button_exit.rect.y = 200
