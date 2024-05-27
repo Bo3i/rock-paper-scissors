@@ -1,9 +1,40 @@
 import pika
+import threading
 
 connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
 channel = connection.channel()
 
+stop_event = threading.Event()
 sessions = {}
+
+class Consumer(threading.Thread):
+    def __init__(self, queue_name, host, callback, stop_event):
+        super().__init__()
+        self.queue_name = queue_name
+        self.stop_event = stop_event
+        self.connection = pika.BlockingConnection(pika.ConnectionParameters(host))
+        self.channel = self.connection.channel()
+        self.channel.queue_declare(queue=queue_name)
+        self.callback = callback
+
+    def run(self):
+
+        while not self.stop_event.is_set():
+            method_frame, header_frame, body = self.channel.basic_get(self.queue_name)
+            if method_frame:
+                print(f"Received message: {body}")
+                self.channel.basic_ack(method_frame.delivery_tag)
+                self.callback(self.channel, method_frame, header_frame, body)
+            # else:
+            #     time.sleep(1)
+
+    def stop(self):
+        self.stop_event.set()
+        self.connection.close()
+
+
+def remove_disconected(ch, method, properties, body):
+    print('Removing disconected')
 
 
 def callback(ch, method, properties, body):
@@ -17,19 +48,31 @@ def callback(ch, method, properties, body):
     if session_id in sessions:
         if len(sessions[session_id]) < 2:
             sessions[session_id].append(player_name)
+            if sessions[session_id][0] == player_name:
+                p_id = 0
+            else:
+                p_id = 1
             channel.basic_publish(exchange='',
                                   routing_key=f"q{player_name}{session_id}status",
-                                  body='0')
+                                  body=f'o,{p_id}')
+            Consumer(f'q{player_name}{session_id}{p_id}exit', 'localhost', remove_disconected, stop_event).start()
+
+
+
         else:
             print("Session is full")
             channel.basic_publish(exchange='',
                                   routing_key=f"q{player_name}{session_id}status",
-                                  body='1')
+                                  body='f')
     else:
         sessions[session_id] = [player_name]
+        # channel.basic_publish(exchange='',
+        #                       routing_key=f"q{player_name}{session_id}status",
+        #                       body='0')
         channel.basic_publish(exchange='',
                               routing_key=f"q{player_name}{session_id}status",
-                              body='0')
+                              body=f'o,0')
+        Consumer(f'q{player_name}{session_id}0exit', 'localhost', remove_disconected, stop_event).start()
 
     if len(sessions[session_id]) == 2:
         print("Session", session_id, "is ready with players:", sessions[session_id])
@@ -43,7 +86,7 @@ def callback(ch, method, properties, body):
             channel.queue_declare(queue=f"q{player}{session_id}{p_id}")
             channel.queue_declare(queue=f"q{player}{p_id}won")
             channel.basic_publish(exchange='',
-                                  routing_key=f"q{player}",
+                                  routing_key=f"q{player}{session_id}{p_id}",
                                   body=f"{opponent},{p_id}")
             print(f"Sent {opponent},{p_id} to q{player}")
         start_game(session_id, [0, 0])
@@ -86,11 +129,11 @@ def start_game(session_id, score):
 
     player1_name = sessions[session_id][0]
     player2_name = sessions[session_id][1]
-    channel.queue_declare(f"q{player1_name}{session_id}0")
-    channel.queue_declare(f"q{player2_name}{session_id}1")
+    channel.queue_declare(f"q{player1_name}{session_id}0choice")
+    channel.queue_declare(f"q{player2_name}{session_id}1choice")
 
-    channel.basic_consume(queue=f"q{player1_name}{session_id}0", on_message_callback=recieve1, auto_ack=True)
-    channel.basic_consume(queue=f"q{player2_name}{session_id}1", on_message_callback=recieve2, auto_ack=True)
+    channel.basic_consume(queue=f"q{player1_name}{session_id}0choice", on_message_callback=recieve1, auto_ack=True)
+    channel.basic_consume(queue=f"q{player2_name}{session_id}1choice", on_message_callback=recieve2, auto_ack=True)
 
     def play():
         if player1_move != '' and player2_move != '':

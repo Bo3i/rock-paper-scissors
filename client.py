@@ -59,13 +59,9 @@ current_state = 'main_menu'  # Initial state
 # Function to exit the game
 def exit_game():
     global running
-
-
-
     running = False
 
     print("DEBUG: Exiting game")
-
 
 
 # Function for connecting to the server
@@ -98,6 +94,18 @@ def init_game():
     buttons = [button_sethost]
     box = gc.InputBox(300, 200, 200, 50, FONT)
     input_boxes = [box]
+
+
+def on_exit_publish():
+    global host
+    connection = pika.BlockingConnection(pika.ConnectionParameters(host))
+    channel = connection.channel()
+    channel.basic_publish(
+        exchange='',
+        routing_key=f'q{player_name}{session_id}{p_id}exit',
+        body=f'd,{p_id}'
+    )
+    print('Publishing session exit message')
 
 
 # Function for starting new session
@@ -133,17 +141,19 @@ def start_session():
 
 
 def on_connect(ch, method, properties, body):
-    global texts, buttons
+    global texts, buttons, p_id
     mess = body.decode()
     print(f"recieved: {mess}")
-    if mess == "0":
-        conn_consumer = Consumer(f'q{player_name}', host, on_response, stop_event)
+    status, p_id = mess.split(',')
+    if status == 'o':
+        conn_consumer = Consumer(f'q{player_name}{session_id}{p_id}', host, on_response, stop_event)
         conn_consumer.start()
         consumers.append(conn_consumer)
         texts = ["Waiting for other player..."]
-    elif mess == "1":
+    elif status == 'f':
         texts = [f"Session: {session_id} is full"]
         buttons = [button_menu]
+
 
 # Function for handling server response
 def on_response(ch, method, properties, body):
@@ -152,7 +162,6 @@ def on_response(ch, method, properties, body):
         opponent, p_id = body.decode().split(",")
         print(f"DEBUG: Playing against: {opponent}!")
 
-        channel.queue_declare(queue=f"q{player_name}{session_id}{p_id}")
         channel.queue_declare(queue=f"q{player_name}{p_id}won")
 
         start_game()
@@ -251,7 +260,7 @@ def send_input():
             input_consumer.start()
             consumers.append(input_consumer)
             channel.basic_publish(exchange='',
-                                  routing_key=f"q{player_name}{session_id}{p_id}",
+                                  routing_key=f"q{player_name}{session_id}{p_id}choice",
                                   body=player_input)
 
     except Exception as e:
@@ -322,7 +331,8 @@ def set_name():
 
 def menu():
     global connection, texts, buttons, input_boxes
-
+    if current_state != 'main_menu':
+        on_exit_publish()
     texts = ["Rock Paper Scissors"]
     button_exit.rect.x = WIDTH/2
     button_exit.rect.y = 200
