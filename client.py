@@ -25,7 +25,7 @@ BLACK = (0, 0, 0)
 GREY = (133, 117, 110)
 
 # Pygame setup
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
+screen = pygame.display.set_mode((WIDTH, HEIGHT), vsync=1)
 pygame.display.set_caption("Rock Paper Scissors Game")
 
 # Load and resize images
@@ -58,7 +58,8 @@ current_state = 'main_menu'  # Initial state
 
 # Function to exit the game
 def exit_game():
-    global running
+    global running, stop_event
+    stop_event.set()
     running = False
 
     print("DEBUG: Exiting game")
@@ -95,6 +96,16 @@ def init_game():
     box = gc.InputBox(300, 200, 200, 50, FONT)
     input_boxes = [box]
 
+def on_exit_recieve(ch, method, properties, body):
+    global p_id
+    print('Recieved oponent disconnection')
+    p_id = body.decode()
+    conn_consumer = Consumer(f'q{player_name}{session_id}{p_id}', host, on_response, stop_event)
+    conn_consumer.start()
+    consumers.append(conn_consumer)
+    texts=['Opponent disconnected']
+    buttons=[button_menu]
+
 
 def on_exit_publish():
     global host
@@ -103,8 +114,9 @@ def on_exit_publish():
     channel.basic_publish(
         exchange='',
         routing_key=f'q{player_name}{session_id}{p_id}exit',
-        body=f'd,{p_id}'
+        body=f'{p_id},{session_id}'
     )
+
     print('Publishing session exit message')
 
 
@@ -129,10 +141,11 @@ def start_session():
         conn_consumer = Consumer(f"q{player_name}{session_id}status", host, on_connect, stop_event)
         conn_consumer.start()
         consumers.append(conn_consumer)
+        texts = [f"Connecting to session: {session_id} ..."]
+        Consumer(f'q{player_name}{session_id}ex', host, on_exit_recieve, stop_event).start()
 
         print(f"Connecting to session: {session_id} ...")
 
-        texts = [f"Connecting to session: {session_id} ..."]
 
     except Exception as e:
         print(f"ERROR: Error starting session: {e}")
@@ -276,7 +289,7 @@ def start_game():
     button_exit.rect.y = 450
     button_menu.rect.x = 400
     button_menu.rect.y = 450
-    buttons = [rock_button, paper_button, scissors_button, button_exit, button_menu]
+    buttons = [rock_button, paper_button, scissors_button, button_menu]
     current_state = 'game'
     main()
 
@@ -403,6 +416,9 @@ def main():
         clock.tick(30)
 
     stop_event.set()
+
+    for consumer in consumers:
+        consumer.join()
 
 
     pygame.quit()

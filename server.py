@@ -34,7 +34,17 @@ class Consumer(threading.Thread):
 
 
 def remove_disconected(ch, method, properties, body):
-    print('Removing disconected')
+    message = body.decode()
+    p_id_r, s_id = message.split(',')
+    print(f'Removing disconnected player: {sessions[s_id][int(p_id_r)]}')
+    sessions[s_id].pop(int(p_id_r))
+    print(f'Session: {s_id} --> {sessions[s_id]}')
+    channel.basic_publish(
+        exchange='',
+        routing_key=f'q{sessions[s_id][0]}{s_id}ex',
+        body='0'
+    )
+
 
 
 def callback(ch, method, properties, body):
@@ -44,35 +54,57 @@ def callback(ch, method, properties, body):
 
     session_id, player_name = message.split(',')
     channel.queue_declare(queue=f"q{player_name}{session_id}status")
+    join_player(session_id, player_name)
+    start_session(session_id)
 
-    if session_id in sessions:
-        if len(sessions[session_id]) < 2:
-            sessions[session_id].append(player_name)
-            if sessions[session_id][0] == player_name:
-                p_id = 0
-            else:
-                p_id = 1
-            channel.basic_publish(exchange='',
-                                  routing_key=f"q{player_name}{session_id}status",
-                                  body=f'o,{p_id}')
-            Consumer(f'q{player_name}{session_id}{p_id}exit', 'localhost', remove_disconected, stop_event).start()
+    # if session_id in sessions:
+    #     if len(sessions[session_id]) < 2:
+    #         sessions[session_id].append(player_name)
+    #         if sessions[session_id][0] == player_name:
+    #             p_id = 0
+    #         else:
+    #             p_id = 1
+    #         channel.basic_publish(exchange='',
+    #                               routing_key=f"q{player_name}{session_id}status",
+    #                               body=f'o,{p_id}')
+    #         Consumer(f'q{player_name}{session_id}{p_id}exit', 'localhost', remove_disconected, stop_event).start()
+    #
+    #
+    #
+    #     else:
+    #         print("Session is full")
+    #         channel.basic_publish(exchange='',
+    #                               routing_key=f"q{player_name}{session_id}status",
+    #                               body='f')
+    # else:
+    #     sessions[session_id] = [player_name]
+    #     # channel.basic_publish(exchange='',
+    #     #                       routing_key=f"q{player_name}{session_id}status",
+    #     #                       body='0')
+    #     channel.basic_publish(exchange='',
+    #                           routing_key=f"q{player_name}{session_id}status",
+    #                           body=f'o,0')
+    #     Consumer(f'q{player_name}{session_id}0exit', 'localhost', remove_disconected, stop_event).start()
+    #
+    # if len(sessions[session_id]) == 2:
+    #     print("Session", session_id, "is ready with players:", sessions[session_id])
+    #     for player in sessions[session_id]:
+    #         if sessions[session_id][0] == player:
+    #             opponent = sessions[session_id][1]
+    #             p_id = 0
+    #         else:
+    #             opponent = sessions[session_id][0]
+    #             p_id = 1
+    #         channel.queue_declare(queue=f"q{player}{session_id}{p_id}")
+    #         channel.queue_declare(queue=f"q{player}{p_id}won")
+    #         channel.basic_publish(exchange='',
+    #                               routing_key=f"q{player}{session_id}{p_id}",
+    #                               body=f"{opponent},{p_id}")
+    #         print(f"Sent {opponent},{p_id} to q{player}")
+    #     start_game(session_id, [0, 0])
 
 
-
-        else:
-            print("Session is full")
-            channel.basic_publish(exchange='',
-                                  routing_key=f"q{player_name}{session_id}status",
-                                  body='f')
-    else:
-        sessions[session_id] = [player_name]
-        # channel.basic_publish(exchange='',
-        #                       routing_key=f"q{player_name}{session_id}status",
-        #                       body='0')
-        channel.basic_publish(exchange='',
-                              routing_key=f"q{player_name}{session_id}status",
-                              body=f'o,0')
-        Consumer(f'q{player_name}{session_id}0exit', 'localhost', remove_disconected, stop_event).start()
+def start_session(session_id):
 
     if len(sessions[session_id]) == 2:
         print("Session", session_id, "is ready with players:", sessions[session_id])
@@ -92,7 +124,40 @@ def callback(ch, method, properties, body):
         start_game(session_id, [0, 0])
 
 
+def join_player(session_id, player_name):
+    if session_id in sessions:
+        if len(sessions[session_id]) < 2:
+            sessions[session_id].append(player_name)
+            if sessions[session_id][0] == player_name:
+                p_id = 0
+            else:
+                p_id = 1
+            channel.basic_publish(exchange='',
+                                  routing_key=f"q{player_name}{session_id}status",
+                                  body=f'o,{p_id}')
+            Consumer(f'q{player_name}{session_id}{p_id}exit', 'localhost', remove_disconected, stop_event).start()
+
+        else:
+            print("Session is full")
+            channel.basic_publish(exchange='',
+                                  routing_key=f"q{player_name}{session_id}status",
+                                  body='f,0')
+    else:
+        sessions[session_id] = [player_name]
+        channel.basic_publish(exchange='',
+                              routing_key=f"q{player_name}{session_id}status",
+                              body=f'o,0')
+        Consumer(f'q{player_name}{session_id}0exit', 'localhost', remove_disconected, stop_event).start()
+
+
 def start_game(session_id, score):
+    global channel
+    if len(sessions[session_id]) != 2:
+        channel.basic_publish(
+            exchange='',
+            routing_key=f'q{sessions[session_id][0]}{session_id}ex',
+            body='0'
+        )
     print("Starting new round")
     player1_move, player2_move = '', ''
     recieved = [0, 0]
