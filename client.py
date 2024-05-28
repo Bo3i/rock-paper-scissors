@@ -11,7 +11,7 @@ import game_components as gc
 pygame.init()
 pygame.mixer.init()
 pygame.mixer.music.load("Atmospheric-ambient-music.wav")
-pygame.mixer.music.play(-1)
+# pygame.mixer.music.play(-1)
 
 
 # Constants
@@ -96,15 +96,16 @@ def init_game():
     box = gc.InputBox(300, 200, 200, 50, FONT)
     input_boxes = [box]
 
+
 def on_exit_recieve(ch, method, properties, body):
-    global p_id
+    global p_id, texts, buttons
     print('Recieved oponent disconnection')
     p_id = body.decode()
     conn_consumer = Consumer(f'q{player_name}{session_id}{p_id}', host, on_response, stop_event)
     conn_consumer.start()
     consumers.append(conn_consumer)
-    texts=['Opponent disconnected']
-    buttons=[button_menu]
+    texts = ['Opponent disconnected']
+    buttons = [button_menu]
 
 
 def on_exit_publish():
@@ -282,7 +283,16 @@ def send_input():
 
 # Starting game
 def start_game():
-    global buttons, texts, current_state, is_clicked, opponent, your_s, their_s
+    global buttons, texts, current_state, is_clicked, opponent, your_s, their_s, channel, p_id
+    if p_id == 0:
+        score = [your_s, their_s]
+    else:
+        score = [their_s, your_s]
+    channel.basic_publish(
+        exchage='',
+        routing_key=f'q{session_id}{p_id}{player_name}yes',
+        body=f'{score},{p_id}'
+    )
     print("DEBUG: Entering start_game function")
     texts = [f"You {your_s} : {their_s} {opponent}"]
     button_exit.rect.x = 200
