@@ -218,7 +218,6 @@ def winner(ch, method, properties, body):
         buttons = [button_yes, button_menu]
         current_state = 'end_round'
         is_clicked = False
-        main()
     except Exception as e:
         print(f"ERROR: Error in winner callback: {e},{traceback.format_exc()}")
 
@@ -292,7 +291,6 @@ def start_game():
     button_menu.rect.y = 450
     buttons = [rock_button, paper_button, scissors_button, button_menu]
     current_state = 'game'
-    main()
 
 
 # Functions for handling player choices
@@ -327,7 +325,6 @@ def define_session():
     texts = ["Connect to session:"]
     box = gc.InputBox(300, 200, 200, 50, FONT)
     input_boxes = [box]
-    main()
 
 
 # Function to set player name
@@ -340,7 +337,6 @@ def set_name():
     buttons = [button_name]
     box = gc.InputBox(300, 200, 200, 50, FONT)
     input_boxes = [box]
-    main()
 
 
 # Function to return to main menu
@@ -353,7 +349,6 @@ def menu():
     button_exit.rect.y = 200
     buttons = [button_start, button_exit]
     input_boxes = []
-    main()
 
 
 # Buttons declaration

@@ -8,7 +8,7 @@ channel = connection.channel()
 # Declaring the session and score dictionaries
 stop_event = threading.Event()
 sessions = {}
-scores ={}
+scores = {}
 
 
 # Consumer class to consume messages from the queue
