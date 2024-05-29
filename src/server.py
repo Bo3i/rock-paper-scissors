@@ -3,7 +3,7 @@ import sys
 import pika
 import threading
 import signal
-import q_consumer as c
+from src import q_consumer as c
 
 # Connection to the RabbitMQ server
 connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
