@@ -1,14 +1,17 @@
 import pika
 import threading
 
+# Connection to the RabbitMQ server
 connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
 channel = connection.channel()
 
+# Declaring the session and score dictionaries
 stop_event = threading.Event()
 sessions = {}
 scores ={}
 
 
+# Consumer class to consume messages from the queue
 class Consumer(threading.Thread):
     def __init__(self, queue_name, host, callback, stop_event):
         super().__init__()
@@ -24,25 +27,23 @@ class Consumer(threading.Thread):
         while not self.stop_event.is_set():
             method_frame, header_frame, body = self.channel.basic_get(self.queue_name)
             if method_frame:
-                # print(f"Received message: {body}")
                 self.channel.basic_ack(method_frame.delivery_tag)
                 self.callback(self.channel, method_frame, header_frame, body)
-            # else:
-            #     time.sleep(1)
 
     def stop(self):
         self.stop_event.set()
         self.connection.close()
 
 
+# Function to remove disconnected players
 def remove_disconected(ch, method, properties, body):
     message = body.decode()
     p_id_r, s_id = message.split(',')
     if len(sessions[s_id]) != 0:
-        print(f'Removing disconnected players')
+        print(f'Removing disconnected players. Session: {s_id} is now empty')
+
         sessions[s_id].pop(int(p_id_r))
         scores[s_id] = [0, 0]
-        print(f'Session: {s_id} --> {sessions[s_id]}')
         if len(sessions[s_id]) == 1:
             channel.basic_publish(
                 exchange='',
@@ -50,21 +51,20 @@ def remove_disconected(ch, method, properties, body):
                 routing_key=f'q{sessions[s_id][0]}{s_id}ex',
                 body='0'
             )
-            print('publishing opponent disconnected')
         sessions[s_id] = []
 
 
+# Callback function to handle the incoming messages
 def callback(ch, method, properties, body):
     message = body.decode()
-    print("Received:", message)
-    #ch.basic_ack(delivery_tag=method.delivery_tag)
-
     session_id, player_name = message.split(',')
+    print(f"Received Session ID: {session_id} from player: {player_name }")
     channel.queue_declare(queue=f"q{player_name}{session_id}status")
     join_player(session_id, player_name)
     start_session(session_id)
 
 
+# Function to start the session
 def start_session(session_id):
 
     if len(sessions[session_id]) == 2:
@@ -81,16 +81,15 @@ def start_session(session_id):
             channel.basic_publish(exchange='',
                                   routing_key=f"q{player}{session_id}{p_id}",
                                   body=f"{opponent},{p_id}")
-            print(f"Sent {opponent},{p_id} to q{player}")
         start_game(session_id)
 
 
+# Function to join the player to the session
 def join_player(session_id, player_name):
     if session_id in sessions:
         scores[session_id] = [0, 0]
         if len(sessions[session_id]) < 2:
             sessions[session_id].append(player_name)
-            print(f'score is now set to : {scores[session_id]}')
             if sessions[session_id][0] == player_name:
                 p_id = 0
             else:
@@ -101,7 +100,7 @@ def join_player(session_id, player_name):
             Consumer(f'q{player_name}{session_id}{p_id}exit', 'localhost', remove_disconected, stop_event).start()
 
         else:
-            print("Session is full")
+            print(f"Session: {session_id} is full, denied connection to player: {player_name}")
             channel.basic_publish(exchange='',
                                   routing_key=f"q{player_name}{session_id}status",
                                   body='f,0')
@@ -114,6 +113,7 @@ def join_player(session_id, player_name):
         Consumer(f'q{player_name}{session_id}0exit', 'localhost', remove_disconected, stop_event).start()
 
 
+# Function to start the game in the session
 def start_game(session_id):
     global channel
     if len(sessions[session_id]) != 2:
@@ -126,8 +126,7 @@ def start_game(session_id):
     print(f"Starting new round with score: {scores[session_id]}")
     player1_move, player2_move = '', ''
     recieved = [0, 0]
-    print("Waiting for players")
-    print(f"recieved: {recieved}")
+    print("Waiting for players' choices...")
 
     def recieve1(ch, method, properties, body):
         nonlocal player1_move, recieved
@@ -135,7 +134,6 @@ def start_game(session_id):
         print(f"Recieved {player1_move} from player {player1_name}")
         recieved[0] += 1
         if recieved[0] == recieved[1] and recieved[0]+recieved[1] != 0:
-            print('Now checking the winner')
             play()
         else:
             print('Waiting for all to respond')
@@ -160,6 +158,7 @@ def start_game(session_id):
     channel.basic_consume(queue=f"q{player1_name}{session_id}0choice", on_message_callback=recieve1, auto_ack=True)
     channel.basic_consume(queue=f"q{player2_name}{session_id}1choice", on_message_callback=recieve2, auto_ack=True)
 
+    # Function to check the winner
     def play():
 
         if player1_move != '' and player2_move != '':
@@ -198,7 +197,6 @@ def start_game(session_id):
             rec = [0, 0]
 
             def new_round(ch, method, properties, body):
-                print('Recieved new round YES')
                 p_id = body.decode()
                 rec[int(p_id)] = 1
                 if len(sessions[session_id]) == 2:
@@ -215,12 +213,10 @@ def start_game(session_id):
             # start_game(session_id)
 
         else:
-            print("------------")
             print("Wrong input!")
-            print(f"Player1: {player1_move}")
-            print(f"Player2: {player2_move}")
 
 
+# Declaring the queue
 result = channel.queue_declare(queue='start', exclusive=False)
 queue_name = result.method.queue
 

@@ -3,15 +3,14 @@ import threading
 import pygame
 import pika
 import traceback
-import time
-import signal
-import wave
 import game_components as gc
 
+
+# Initialize pygame and pygame.mixer
 pygame.init()
 pygame.mixer.init()
 pygame.mixer.music.load("Atmospheric-ambient-music.wav")
-# pygame.mixer.music.play(-1)
+pygame.mixer.music.play(-1)
 
 
 # Constants
@@ -24,9 +23,11 @@ TEXT_COLOR = (79, 79, 64)
 BLACK = (0, 0, 0)
 GREY = (133, 117, 110)
 
+
 # Pygame setup
 screen = pygame.display.set_mode((WIDTH, HEIGHT), vsync=1)
 pygame.display.set_caption("Rock Paper Scissors Game")
+
 
 # Load and resize images
 rock_img = pygame.image.load('rock.jpg')
@@ -41,7 +42,9 @@ scissors_img = pygame.transform.scale(scissors_img, (150, 150))
 FONT = pygame.font.Font(None, 32)
 LARGE_FONT = pygame.font.Font(None, 56)
 
+
 # Globals for RabbitMQ
+running = False
 host = ''
 player_name = ''
 session_id = ''
@@ -97,21 +100,19 @@ def init_game():
     input_boxes = [box]
 
 
+# Function called when opponent disconnects message is received
 def on_exit_recieve(ch, method, properties, body):
     global p_id, texts, buttons, your_s, their_s
     your_s, their_s = 0, 0
-    print('Recieved oponent disconnection')
-    p_id = body.decode()
-    # conn_consumer = Consumer(f'q{player_name}{session_id}{p_id}', host, on_response, stop_event)
-    # conn_consumer.start()
-    # consumers.append(conn_consumer)
+    print('Received opponent disconnection')
     texts = ['Opponent disconnected', 'Exit to menu']
     buttons = [button_menu]
 
 
+# Function to let the server know player quit the session
 def on_exit_publish():
     global host, is_clicked, your_s, their_s
-    is_clicked - False
+    is_clicked = False
     connection = pika.BlockingConnection(pika.ConnectionParameters(host))
     channel = connection.channel()
     channel.basic_publish(
@@ -121,7 +122,6 @@ def on_exit_publish():
     )
     your_s = 0
     their_s = 0
-
     print('Publishing session exit message')
 
 
@@ -158,11 +158,11 @@ def start_session():
         buttons = [button_exit]
 
 
+# Function for handling server response
 def on_connect(ch, method, properties, body):
     global texts, buttons, p_id, is_clicked
     is_clicked = False
     mess = body.decode()
-    print(f"recieved: {mess}")
     status, p_id = mess.split(',')
     if status == 'o':
         conn_consumer = Consumer(f'q{player_name}{session_id}{p_id}', host, on_response, stop_event)
@@ -179,7 +179,7 @@ def on_response(ch, method, properties, body):
     global opponent, p_id, player_name, channel, current_state
     try:
         opponent, p_id = body.decode().split(",")
-        print(f"DEBUG: Playing against: {opponent}!")
+        print(f"Playing against: {opponent}!")
 
         channel.queue_declare(queue=f"q{player_name}{p_id}won")
 
@@ -190,9 +190,9 @@ def on_response(ch, method, properties, body):
         buttons = [button_exit]
 
 
+# Function for handling server response with round result
 def winner(ch, method, properties, body):
     global connection, channel, texts, buttons, screen, opponent, current_state, your_s, their_s, is_clicked
-    print("recieved result from server")
     try:
         win, mov, y_score, op_score = body.decode().split(",")
         your_s = y_score
@@ -223,6 +223,7 @@ def winner(ch, method, properties, body):
         print(f"ERROR: Error in winner callback: {e},{traceback.format_exc()}")
 
 
+# Function to end the round
 def endof_round():
     global current_state, connection
     try:
@@ -235,6 +236,7 @@ def endof_round():
         sys.exit()
 
 
+# Consumer class for RabbitMQ message consumption in new thread
 class Consumer(threading.Thread):
     def __init__(self, queue_name, host, callback, stop_event):
         super().__init__()
@@ -250,27 +252,15 @@ class Consumer(threading.Thread):
         while not self.stop_event.is_set():
             method_frame, header_frame, body = self.channel.basic_get(self.queue_name)
             if method_frame:
-                print(f"Received message: {body}")
                 self.channel.basic_ack(method_frame.delivery_tag)
                 self.callback(self.channel, method_frame, header_frame, body)
-            # else:
-            #     time.sleep(1)
 
     def stop(self):
         self.stop_event.set()
         self.connection.close()
 
 
-def consume_from_queue(queue_name, callback):
-    global connection, channel
-    connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-    channel = connection.channel()
-
-    channel.queue_declare(queue=queue_name)
-    channel.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=True)
-
-    channel.start_consuming()
-
+# Function to send player input to server
 def send_input():
     global connection, player_input, opponent, texts, buttons, channel, is_clicked
     try:
@@ -353,6 +343,7 @@ def set_name():
     main()
 
 
+# Function to return to main menu
 def menu():
     global connection, texts, buttons, input_boxes
     if current_state != 'main_menu':
@@ -365,7 +356,7 @@ def menu():
     main()
 
 
-# Create buttons
+# Buttons declaration
 button_start = gc.Button(WIDTH / 4, 200, 150, 50, "Start", FONT, BUTTON_COLOR, GREY, init_game)
 button_exit = gc.Button(WIDTH / 2, 200, 150, 50, "Exit", FONT, BUTTON_COLOR, GREY, exit_game)
 rock_button = gc.ImageButton(100, 250, rock_img, on_rock)
@@ -391,7 +382,6 @@ def main():
     global running, current_state
     running = True
     clock = pygame.time.Clock()
-
 
     while running:
         screen.fill(BACKGROUND)
@@ -427,10 +417,9 @@ def main():
         clock.tick(30)
 
     stop_event.set()
-
+    on_exit_publish()
     for consumer in consumers:
         consumer.join()
-
 
     pygame.quit()
     sys.exit()
