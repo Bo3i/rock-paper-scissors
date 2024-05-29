@@ -1,5 +1,9 @@
+import sys
+
 import pika
 import threading
+import signal
+import q_consumer as c
 
 # Connection to the RabbitMQ server
 connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
@@ -7,32 +11,9 @@ channel = connection.channel()
 
 # Declaring the session and score dictionaries
 stop_event = threading.Event()
+consumers = []
 sessions = {}
 scores = {}
-
-
-# Consumer class to consume messages from the queue
-class Consumer(threading.Thread):
-    def __init__(self, queue_name, host, callback, stop_event):
-        super().__init__()
-        self.queue_name = queue_name
-        self.stop_event = stop_event
-        self.connection = pika.BlockingConnection(pika.ConnectionParameters(host))
-        self.channel = self.connection.channel()
-        self.channel.queue_declare(queue=queue_name)
-        self.callback = callback
-
-    def run(self):
-
-        while not self.stop_event.is_set():
-            method_frame, header_frame, body = self.channel.basic_get(self.queue_name)
-            if method_frame:
-                self.channel.basic_ack(method_frame.delivery_tag)
-                self.callback(self.channel, method_frame, header_frame, body)
-
-    def stop(self):
-        self.stop_event.set()
-        self.connection.close()
 
 
 # Function to remove disconnected players
@@ -97,7 +78,9 @@ def join_player(session_id, player_name):
             channel.basic_publish(exchange='',
                                   routing_key=f"q{player_name}{session_id}status",
                                   body=f'o,{p_id}')
-            Consumer(f'q{player_name}{session_id}{p_id}exit', 'localhost', remove_disconected, stop_event).start()
+            exit_consumer = c.Consumer(f'q{player_name}{session_id}{p_id}exit', 'localhost', remove_disconected, stop_event)
+            exit_consumer.start()
+            consumers.append(exit_consumer)
 
         else:
             print(f"Session: {session_id} is full, denied connection to player: {player_name}")
@@ -110,7 +93,9 @@ def join_player(session_id, player_name):
         channel.basic_publish(exchange='',
                               routing_key=f"q{player_name}{session_id}status",
                               body=f'o,0')
-        Consumer(f'q{player_name}{session_id}0exit', 'localhost', remove_disconected, stop_event).start()
+        exit_consumer = c.Consumer(f'q{player_name}{session_id}0exit', 'localhost', remove_disconected, stop_event)
+        exit_consumer.start()
+        consumers.append(exit_consumer)
 
 
 # Function to start the game in the session
@@ -209,12 +194,24 @@ def start_game(session_id):
             channel.basic_consume(queue=f'q{player1_name}{session_id}0ready', on_message_callback=new_round, auto_ack=True)
             channel.basic_consume(queue=f'q{player2_name}{session_id}1ready', on_message_callback=new_round, auto_ack=True)
 
-            # print('Starting new session')
-            # start_game(session_id)
-
         else:
             print("Wrong input!")
 
+
+# Function to handle keyboard interruption
+def signal_handler(sig, frame):
+    print('Keyboard interrupt received, stopping consumers...')
+    stop_event.set()
+    for consumer in consumers:
+        if consumer.is_alive():
+            consumer.stop()
+    for consumer in consumers:
+        consumer.join()
+    print('All consumers have been stopped.')
+    sys.exit()
+
+
+signal.signal(signal.SIGINT, signal_handler)
 
 # Declaring the queue
 result = channel.queue_declare(queue='start', exclusive=False)

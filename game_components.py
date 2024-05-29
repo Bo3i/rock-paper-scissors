@@ -1,4 +1,6 @@
 import pygame
+import threading
+import pika
 
 # Constants
 # WIDTH = 800
@@ -20,7 +22,6 @@ def draw_text(surface, text, font, color, pos):
 
 
 # Button class for image buttons
-
 class ImageButton:
     def __init__(self, x, y, image, callback, border_color=TEXT_COLOR, border_width=2):
         self.image = image

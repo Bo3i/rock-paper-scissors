@@ -3,7 +3,9 @@ import threading
 import pygame
 import pika
 import traceback
+import signal
 import game_components as gc
+import q_consumer as c
 
 
 # Initialize pygame and pygame.mixer
@@ -143,11 +145,14 @@ def start_session():
                               routing_key='start',
                               body=f"{session_id},{player_name}")
 
-        conn_consumer = Consumer(f"q{player_name}{session_id}status", host, on_connect, stop_event)
+        conn_consumer = c.Consumer(f"q{player_name}{session_id}status", host, on_connect, stop_event)
         conn_consumer.start()
         consumers.append(conn_consumer)
         texts = [f"Connecting to session: {session_id} ..."]
-        Consumer(f'q{player_name}{session_id}ex', host, on_exit_recieve, stop_event).start()
+        ex_consumer = c.Consumer(f'q{player_name}{session_id}ex', host, on_exit_recieve, stop_event)
+        ex_consumer.start()
+        consumers.append(ex_consumer)
+
 
         print(f"Connecting to session: {session_id} ...")
 
@@ -165,7 +170,7 @@ def on_connect(ch, method, properties, body):
     mess = body.decode()
     status, p_id = mess.split(',')
     if status == 'o':
-        conn_consumer = Consumer(f'q{player_name}{session_id}{p_id}', host, on_response, stop_event)
+        conn_consumer = c.Consumer(f'q{player_name}{session_id}{p_id}', host, on_response, stop_event)
         conn_consumer.start()
         consumers.append(conn_consumer)
         texts = ["Waiting for other player..."]
@@ -235,36 +240,12 @@ def endof_round():
         sys.exit()
 
 
-# Consumer class for RabbitMQ message consumption in new thread
-class Consumer(threading.Thread):
-    def __init__(self, queue_name, host, callback, stop_event):
-        super().__init__()
-        self.queue_name = queue_name
-        self.stop_event = stop_event
-        self.connection = pika.BlockingConnection(pika.ConnectionParameters(host))
-        self.channel = self.connection.channel()
-        self.channel.queue_declare(queue=queue_name)
-        self.callback = callback
-
-    def run(self):
-
-        while not self.stop_event.is_set():
-            method_frame, header_frame, body = self.channel.basic_get(self.queue_name)
-            if method_frame:
-                self.channel.basic_ack(method_frame.delivery_tag)
-                self.callback(self.channel, method_frame, header_frame, body)
-
-    def stop(self):
-        self.stop_event.set()
-        self.connection.close()
-
-
 # Function to send player input to server
 def send_input():
     global connection, player_input, opponent, texts, buttons, channel, is_clicked
     try:
         if is_clicked:
-            input_consumer = Consumer(f"q{player_name}{p_id}won", host, winner, stop_event)
+            input_consumer = c.Consumer(f"q{player_name}{p_id}won", host, winner, stop_event)
             input_consumer.start()
             consumers.append(input_consumer)
             channel.basic_publish(exchange='',
@@ -374,9 +355,22 @@ their_s = 0
 
 # Main function
 def main():
-    global running, current_state
+    global running, current_state, stop_event, consumers
     running = True
     clock = pygame.time.Clock()
+
+    # Function to handle keyboard interruption
+    def signal_handler(sig, frame):
+        print('Keyboard interrupt received, stopping consumers...')
+        stop_event.set()
+        for consumer in consumers:
+            if consumer.is_alive():
+                consumer.stop()
+        for consumer in consumers:
+            consumer.join()
+        print('All consumers have been stopped.')
+
+    signal.signal(signal.SIGINT, signal_handler)
 
     while running:
         screen.fill(BACKGROUND)
@@ -411,14 +405,8 @@ def main():
 
         clock.tick(30)
 
-    stop_event.set()
-    on_exit_publish()
-    for consumer in consumers:
-        consumer.join()
-
     pygame.quit()
     sys.exit()
-
 
 if __name__ == "__main__":
     main()
