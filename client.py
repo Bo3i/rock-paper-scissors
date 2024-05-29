@@ -98,18 +98,20 @@ def init_game():
 
 
 def on_exit_recieve(ch, method, properties, body):
-    global p_id, texts, buttons
+    global p_id, texts, buttons, your_s, their_s
+    your_s, their_s = 0, 0
     print('Recieved oponent disconnection')
     p_id = body.decode()
-    conn_consumer = Consumer(f'q{player_name}{session_id}{p_id}', host, on_response, stop_event)
-    conn_consumer.start()
-    consumers.append(conn_consumer)
-    texts = ['Opponent disconnected']
+    # conn_consumer = Consumer(f'q{player_name}{session_id}{p_id}', host, on_response, stop_event)
+    # conn_consumer.start()
+    # consumers.append(conn_consumer)
+    texts = ['Opponent disconnected', 'Exit to menu']
     buttons = [button_menu]
 
 
 def on_exit_publish():
-    global host
+    global host, is_clicked, your_s, their_s
+    is_clicked - False
     connection = pika.BlockingConnection(pika.ConnectionParameters(host))
     channel = connection.channel()
     channel.basic_publish(
@@ -117,6 +119,8 @@ def on_exit_publish():
         routing_key=f'q{player_name}{session_id}{p_id}exit',
         body=f'{p_id},{session_id}'
     )
+    your_s = 0
+    their_s = 0
 
     print('Publishing session exit message')
 
@@ -155,7 +159,8 @@ def start_session():
 
 
 def on_connect(ch, method, properties, body):
-    global texts, buttons, p_id
+    global texts, buttons, p_id, is_clicked
+    is_clicked = False
     mess = body.decode()
     print(f"recieved: {mess}")
     status, p_id = mess.split(',')
@@ -196,13 +201,13 @@ def winner(ch, method, properties, body):
         print(mov)
         if win == 'Tie':
             print("DEBUG: It's a tie!")
-            texts = [f"It's a tie!", f"Score: You {y_score} : {op_score} {opponent}", "Do you want to play again?"]
+            texts = [f"It's a tie!", f"You {y_score} : {op_score} {opponent}", "Do you want to play again?"]
         elif win == opponent:
             print(f"DEBUG: {win} wins!")
-            texts = [f"{win} wins!", f"Score: You {y_score} : {op_score} {opponent}", "Do you want to play again?"]
+            texts = [f"{win} wins!", f"You {y_score} : {op_score} {opponent}", "Do you want to play again?"]
         else:
             print("DEBUG: You win!")
-            texts = ["You win!", f"Score: You {y_score} : {op_score} {opponent}", "Do you want to play again?"]
+            texts = ["You win!", f"You {y_score} : {op_score} {opponent}", "Do you want to play again?"]
         screen.fill(BACKGROUND)
         button_menu.rect.x = 125
         button_no.rect.x = 325
@@ -284,15 +289,11 @@ def send_input():
 # Starting game
 def start_game():
     global buttons, texts, current_state, is_clicked, opponent, your_s, their_s, channel, p_id
-    if p_id == 0:
-        score = [your_s, their_s]
-    else:
-        score = [their_s, your_s]
-    channel.basic_publish(
-        exchage='',
-        routing_key=f'q{session_id}{p_id}{player_name}yes',
-        body=f'{score},{p_id}'
-    )
+
+    channel.basic_publish(exchange='',
+                          routing_key=f"q{player_name}{session_id}{p_id}ready",
+                          body=f'{p_id}')
+
     print("DEBUG: Entering start_game function")
     texts = [f"You {your_s} : {their_s} {opponent}"]
     button_exit.rect.x = 200
