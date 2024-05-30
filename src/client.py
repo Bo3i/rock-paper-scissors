@@ -5,13 +5,13 @@ import pika
 import traceback
 import signal
 import game_components as gc
-import q_consumer as c
+import utils as c
 
 
 # Initialize pygame and pygame.mixer
 pygame.init()
 pygame.mixer.init()
-pygame.mixer.music.load("assets/Atmospheric-ambient-music.wav")
+pygame.mixer.music.load(c.resource_path("assets/Atmospheric-ambient-music.wav"))
 pygame.mixer.music.play(-1)
 
 
@@ -32,13 +32,13 @@ pygame.display.set_caption("Rock Paper Scissors Game")
 
 
 # Load and resize images
-rock_img = pygame.image.load('assets/rock.jpg')
+rock_img = pygame.image.load(c.resource_path('assets/rock.jpg'))
 rock_img = pygame.transform.scale(rock_img, (150, 150))
 
-paper_img = pygame.image.load('assets/paper.jpg')
+paper_img = pygame.image.load(c.resource_path('assets/paper.jpg'))
 paper_img = pygame.transform.scale(paper_img, (150, 150))
 
-scissors_img = pygame.image.load('assets/scissors.jpg')
+scissors_img = pygame.image.load(c.resource_path('assets/scissors.jpg'))
 scissors_img = pygame.transform.scale(scissors_img, (150, 150))
 
 FONT = pygame.font.Font(None, 32)

@@ -1,5 +1,17 @@
 import threading
 import pika
+import os
+import sys
+
+
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+
 
 # Consumer class for RabbitMQ message consumption in new thread
 class Consumer(threading.Thread):
