@@ -394,6 +394,11 @@ def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+                try:
+                    on_exit_publish()
+                    signal_handler(0,0)
+                except Exception:
+                    pass
             for button in buttons:
                 button.handle_event(event, is_clicked)
             for box in input_boxes:
@@ -408,6 +413,7 @@ def main():
 
     pygame.quit()
     sys.exit()
+
 
 if __name__ == "__main__":
     main()
