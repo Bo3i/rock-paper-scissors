@@ -74,10 +74,12 @@ def exit_game():
 def connect():
     global host, player_name, texts, buttons, input_boxes, connection, channel, current_state
     for box in input_boxes:
-        if box.text != '':
+        box.text = box.text.strip()
+        if box.text:
             player_name = box.text
         else:
             set_name()
+            return
     if host == '':
         host = 'localhost'
     print(f"DEBUG: Connecting to host: {host}")
@@ -133,11 +135,12 @@ def on_exit_publish():
 def start_session():
     global input_boxes, buttons, texts, session_id, channel, connection
     for box in input_boxes:
-        if box.text != '':
+        box.text = box.text.strip()
+        if box.text:
             session_id = box.text
         else:
             define_session()
-
+            return
     input_boxes = []
     buttons = []
 
