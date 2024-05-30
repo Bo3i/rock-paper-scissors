@@ -108,6 +108,7 @@ def on_exit_recieve(ch, method, properties, body):
     your_s, their_s = 0, 0
     print('Received opponent disconnection')
     texts = ['Opponent disconnected', 'Exit to menu']
+    button_menu.rect.y = 300
     buttons = [button_menu]
 
 
@@ -214,11 +215,9 @@ def winner(ch, method, properties, body):
             print("DEBUG: You win!")
             texts = ["You win!", f"You {y_score} : {op_score} {opponent}", "Do you want to play again?"]
         screen.fill(BACKGROUND)
-        button_menu.rect.x = 125
-        button_no.rect.x = 325
-        button_yes.rect.x = 525
+        button_menu.rect.x = 225
+        button_yes.rect.x = 425
         button_menu.rect.y = 500
-        button_no.rect.y = 500
         button_yes.rect.y = 500
         buttons = [button_yes, button_menu]
         current_state = 'end_round'
@@ -266,9 +265,7 @@ def start_game():
 
     print("DEBUG: Entering start_game function")
     texts = [f"You {your_s} : {their_s} {opponent}"]
-    button_exit.rect.x = 200
-    button_exit.rect.y = 450
-    button_menu.rect.x = 400
+    button_menu.rect.x = 325
     button_menu.rect.y = 450
     buttons = [rock_button, paper_button, scissors_button, button_menu]
     current_state = 'game'
