@@ -109,6 +109,7 @@ def on_exit_recieve(ch, method, properties, body):
     print('Received opponent disconnection')
     texts = ['Opponent disconnected', 'Exit to menu']
     button_menu.rect.y = 300
+    button_menu.rect.x = 325
     buttons = [button_menu]
 
 

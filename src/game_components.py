@@ -98,12 +98,10 @@ class InputBox:
             self.color = GREY if self.active else BLACK
         if event.type == pygame.KEYDOWN:
             if self.active:
-                if event.key == pygame.K_RETURN:
-                    print(self.text)
-                    self.text = ''
-                elif event.key == pygame.K_BACKSPACE:
+
+                if event.key == pygame.K_BACKSPACE:
                     self.text = self.text[:-1]
-                else:
+                elif event.unicode.isalnum() and len(self.text)<=15:
                     self.text += event.unicode
                 self.txt_surface = FONT.render(self.text, True, self.color)
 
